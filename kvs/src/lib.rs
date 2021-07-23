@@ -6,6 +6,9 @@ mod tests {
     }
 }
 
+mod connection;
+pub use connection::Connection;
+
 pub mod server;
 
 pub const DEFAULT_PORT: &str = "9736";
