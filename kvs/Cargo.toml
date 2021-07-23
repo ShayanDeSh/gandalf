@@ -1,0 +1,22 @@
+[package]
+name = "kvs"
+version = "0.1.0"
+authors = ["shayandesh <shayandesh@gmail.com>"]
+edition = "2018"
+repository = "https://github.com/NothingRealm/gandolf/kvs"
+description = """ 
+A key value stroe used in gandolf consensus system
+"""
+
+[[bin]]
+name = "gandolf-kvs-server"
+path = "src/bin/server.rs"
+
+[dependencies]
+tokio = { version = "1", features = ["full"] }
+structopt = "0.3.22"
+
+[dev-dependencies]
+tokio = { version = "1", features = ["test-util"] }
+
+
