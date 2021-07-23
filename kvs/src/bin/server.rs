@@ -4,12 +4,19 @@ use structopt::StructOpt;
 use tokio::net::TcpListener;
 use tokio::signal;
 
+use tracing::{info, Level};
+use tracing_subscriber;
+
 #[tokio::main]
 pub async fn main() -> Result<(), kvs::Error> {
+    tracing_subscriber::fmt::try_init()?;
+
     let cli = Cli::from_args();
     let port: &str = cli.port.as_deref().unwrap_or(kvs::DEFAULT_PORT);
     let listener = TcpListener::bind(&format!("127.0.0.1:{}", port)).await?;
-    println!("{:?}", port);
+
+    info!("Listening to {:?}", port);
+
     server::run(listener, signal::ctrl_c()).await;
     Ok(())
 }
