@@ -14,7 +14,9 @@ pub enum Error {
 
 #[derive(Clone, Debug)]
 pub enum Frame {
-    Integer(u64)
+    Integer(u64),
+    Simple(String),
+    Error(String),
 }
 
 
@@ -26,6 +28,17 @@ impl Frame {
                 Ok(())
             }
             other => Err(format!("Invalid byte `{}` for start of frame", other).into())
+        }
+    }
+
+    pub fn parse(cursor: &mut Cursor<&[u8]>) -> Result<Frame, Error> {
+        match get_u8(cursor)? {
+            b'+' => {
+                let line = get_line(cursor)?.to_vec();
+                let string = String::from_utf8(line)?;
+                Ok(Frame::Simple(string))
+            }
+            _ => unimplemented!(),
         }
     }
 

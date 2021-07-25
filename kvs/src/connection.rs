@@ -42,13 +42,18 @@ impl Connection {
     fn parse_frame(&mut self) -> crate::Result<Option<Frame>> {
         use frame::Error::Incomplete;
 
-
         let mut cursor = Cursor::new(&self.buffer[..]);
         match Frame::check(&mut cursor) {
 
             Ok(_) => {
                 let len = cursor.position() as usize;
                 cursor.set_position(0);
+
+                let frame = Frame::parse(&mut cursor)?;
+                
+                self.buffer.advance(len);
+
+                Ok(Some(frame))
                 
             }
             Err(Incomplete) => Ok(None),
