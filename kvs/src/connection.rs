@@ -1,9 +1,9 @@
 use bytes::{Buf, BytesMut};
 
 use tokio::net::TcpStream;
-use tokio::io::{AsyncReadExt, AsyncWriteExt, BufWriter};
+use tokio::io::{AsyncReadExt, BufWriter};
 
-use tracing::{debug, error, info, instrument};
+use tracing::{debug};
 
 use std::io::{Cursor};
 
@@ -25,6 +25,7 @@ impl Connection {
 
     pub async fn read(&mut self) -> crate::Result<Option<Frame>> {
         loop {
+
             if let Some(frame) = self.parse_frame()? {
                 return Ok(Some(frame));
             }
@@ -36,6 +37,7 @@ impl Connection {
                     return Err("connection reset by peer".into());
                 }
             }
+
         }
     }
 
@@ -43,6 +45,7 @@ impl Connection {
         use frame::Error::Incomplete;
 
         let mut cursor = Cursor::new(&self.buffer[..]);
+
         match Frame::check(&mut cursor) {
 
             Ok(_) => {
@@ -53,14 +56,14 @@ impl Connection {
                 
                 self.buffer.advance(len);
 
+                debug!("Frame Recived: {:?}", frame);
                 Ok(Some(frame))
-                
             }
+
             Err(Incomplete) => Ok(None),
-            Err(e) => Err(e.into())
+
+            Err(e) => Err(e.into()),
         }
-
-
     }
 
 }
