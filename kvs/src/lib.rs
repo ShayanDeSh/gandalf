@@ -14,6 +14,9 @@ pub mod server;
 pub mod frame;
 pub use frame::Frame;
 
+pub mod parse;
+pub use parse::Parse;
+
 pub const DEFAULT_PORT: &str = "9736";
 
 pub type Error = Box<dyn std::error::Error + Send + Sync>;
