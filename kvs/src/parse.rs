@@ -62,7 +62,14 @@ impl Parse {
             )
             .into()),
         }
+    }
 
+    pub fn finish(&mut self) -> Result<(), ParseError> {
+        if self.parts.next().is_none() {
+            Ok(())
+        } else {
+            Err("Expected end of array but got more".into())
+        }
     }
 
 }
