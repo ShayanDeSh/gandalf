@@ -24,6 +24,7 @@ pub enum Frame {
     Error(String),
     Array(Vec<Frame>),
     Bulk(Bytes),
+    Null
 }
 
 
@@ -67,6 +68,38 @@ impl Frame {
                 let line = get_line(cursor)?.to_vec();
                 let string = String::from_utf8(line)?;
                 Ok(Frame::Simple(string))
+            }
+            b'-' => {
+                let line = get_line(cursor)?.to_vec();
+                let string = String::from_utf8(line)?;
+                Ok(Frame::Error(string))
+            }
+            b':' => {
+                let num = get_decimal(cursor)?;
+                Ok(Frame::Integer(num))
+            }
+            b'$' => {
+                if peek_u8(cursor)? == b'-' {
+                    let line = get_line(cursor)?;
+                    if line != b"-1" {
+                        return Err("Could not parse this shit".into());
+                    }
+                    Ok(Frame::Null)
+                } else {
+                    get_decimal(cursor)?;
+                    let data = get_line(cursor)?;
+                    let bytess = Bytes::copy_from_slice(data);
+                    Ok(Frame::Bulk(bytess))
+                }
+            }
+            b'*' => {
+                let len = get_decimal(cursor)?;
+                let mut frames = Vec::with_capacity(len as usize);
+                for _ in 0..len {
+                    let frame = Frame::parse(cursor)?;
+                    frames.push(frame);
+                }
+                Ok(Frame::Array(frames))
             }
             _ => unimplemented!(),
         }
