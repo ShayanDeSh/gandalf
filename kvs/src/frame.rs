@@ -1,9 +1,14 @@
 use std::io::{Cursor};
-use bytes::{Buf};
+use bytes::{Buf, Bytes};
 
 use std::fmt;
 use std::num::TryFromIntError;
 use std::string::FromUtf8Error;
+
+use std::convert::TryInto;
+
+use atoi::atoi;
+
 
 #[derive(Debug)]
 pub enum Error {
@@ -17,6 +22,8 @@ pub enum Frame {
     Integer(u64),
     Simple(String),
     Error(String),
+    Array(Vec<Frame>),
+    Bulk(Bytes),
 }
 
 
@@ -25,6 +32,29 @@ impl Frame {
         match get_u8(cursor)? {
             b'+' => {
                 get_line(cursor)?;
+                Ok(())
+            }
+            b'-' => {
+                get_line(cursor)?;
+                Ok(())
+            }
+            b'*' => {
+                let len = get_decimal(cursor)?;
+                for _ in 0..len {
+                    Frame::check(cursor)?;
+                }
+                Ok(())
+            }
+            b'$' => {
+                if peek_u8(cursor)? == b'-' {
+                    skip(cursor, 4)
+                } else {
+                    let len: usize = get_decimal(cursor)?.try_into()?;
+                    skip(cursor, len + 2)
+                }
+            }
+            b':' => {
+                get_decimal(cursor)?;
                 Ok(())
             }
             other => Err(format!("Invalid byte `{}` for start of frame", other).into())
@@ -44,6 +74,22 @@ impl Frame {
 
 }
 
+fn skip(cursor: &mut Cursor<&[u8]>, len: usize) -> Result<(), Error> {
+    if !cursor.has_remaining() {
+        return Err(Error::Incomplete);
+    }
+    cursor.advance(len);
+    Ok(())
+}
+
+
+fn peek_u8(cursor: &mut Cursor<&[u8]>) -> Result<u8, Error> {
+    if !cursor.has_remaining() {
+        return Err(Error::Incomplete);
+    }
+    Ok(cursor.get_ref()[0])
+}
+
 
 fn get_u8(cursor: &mut Cursor<&[u8]>) -> Result<u8, Error>{
     if !cursor.has_remaining() {
@@ -51,6 +97,12 @@ fn get_u8(cursor: &mut Cursor<&[u8]>) -> Result<u8, Error>{
     } 
 
     Ok(cursor.get_u8())
+}
+
+
+fn get_decimal(cursor: &mut Cursor<&[u8]>) -> Result<u64, Error> {
+    let line = get_line(cursor)?;
+    atoi::<u64>(line).ok_or_else(|| format!("Can not {:?} cast to u64", line).into())
 }
 
 
