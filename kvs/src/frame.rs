@@ -9,6 +9,7 @@ use std::convert::TryInto;
 
 use atoi::atoi;
 
+use tracing::{debug, error, info, instrument};
 
 #[derive(Debug)]
 pub enum Error {
@@ -86,10 +87,15 @@ impl Frame {
                     }
                     Ok(Frame::Null)
                 } else {
-                    get_decimal(cursor)?;
-                    let data = get_line(cursor)?;
-                    let bytess = Bytes::copy_from_slice(data);
-                    Ok(Frame::Bulk(bytess))
+                    let len = get_decimal(cursor)?.try_into()?;
+                    let n = len + 2;
+                    if cursor.remaining() < n {
+                        return Err(Error::Incomplete);
+                    }
+                    let data = Bytes::copy_from_slice(&cursor.chunk()[..len]);
+                    skip(cursor, n)?;
+
+                    Ok(Frame::Bulk(data))
                 }
             }
             b'*' => {
@@ -108,7 +114,8 @@ impl Frame {
 }
 
 fn skip(cursor: &mut Cursor<&[u8]>, len: usize) -> Result<(), Error> {
-    if !cursor.has_remaining() {
+
+    if cursor.remaining() < len {
         return Err(Error::Incomplete);
     }
     cursor.advance(len);
