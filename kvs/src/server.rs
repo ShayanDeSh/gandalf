@@ -4,7 +4,7 @@ use tracing::{debug, error, info, instrument};
 
 use bytes::BytesMut;
 
-use crate::{Connection};
+use crate::{Connection, Command};
 
 pub struct Listener {
     listener: TcpListener
@@ -44,6 +44,16 @@ impl Listener {
                         return;
                     }
                 };
+
+                let cmd = match Command::from_frame(frame) {
+                    Ok(cmd) => cmd,
+                    Err(e) => {
+                        error!(cause = ?e, "connection error");
+                        return;
+                    }
+                };
+
+                debug!("Recived {:?}", cmd);
 
             });
 

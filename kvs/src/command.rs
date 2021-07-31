@@ -2,6 +2,8 @@ use crate::{Frame, Parse};
 
 use bytes::Bytes;
 
+use tracing::{debug, error, info, instrument};
+
 #[derive(Debug)]
 pub enum Command {
     Get(Get),
@@ -25,6 +27,8 @@ impl Command {
         let mut parse = Parse::new(frame)?;
 
         let cmd_name = parse.next_string()?.to_lowercase();
+
+        debug!("cmd name is {:?}", cmd_name);
 
         let cmd = match &cmd_name[..] {
             "get" => Command::Get(Get::from_parse(&mut parse)?),
