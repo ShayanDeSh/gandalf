@@ -20,6 +20,8 @@ pub use parse::Parse;
 pub mod command;
 pub use command::Command;
 
+pub mod db;
+
 pub const DEFAULT_PORT: &str = "9736";
 
 pub type Error = Box<dyn std::error::Error + Send + Sync>;
