@@ -1,4 +1,4 @@
-use crate::{Frame, Parse};
+use crate::{Frame, Parse, Db};
 
 use bytes::Bytes;
 
@@ -62,10 +62,29 @@ impl Get {
         &self.key
     }
 
+    pub fn apply(self, db: &Db) -> crate::Result<()> {
+        let response = if let Some(value) = db.get(&self.key) {
+            Frame::Bulk(value)
+        } else {
+            Frame::Null
+        };
+
+        debug!(?response);
+
+        Ok(())
+    }
+
 }
 
 
 impl Set {
+    pub fn new(key: impl ToString, value: Bytes) -> Set {
+        Set {
+            key: key.to_string(),
+            value: value
+        }
+    }
+
     pub fn from_parse(parse: &mut Parse) -> crate::Result<Set> {
         let key = parse.next_string()?;
         let value = parse.next_bytes()?;
@@ -73,6 +92,21 @@ impl Set {
             key: key,
             value: value
         })
+    }
+
+    pub fn apply(self, db: &Db) -> crate::Result<()>{
+        db.set(self.key, self.value);
+        let response = Frame::Simple("OK".into());
+        debug!(?response);
+        Ok(())
+    }
+
+    pub fn key(&self) -> &str {
+        &self.key
+    }
+
+    pub fn value(&self) -> &Bytes {
+        &self.value
     }
 }
 
