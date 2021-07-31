@@ -4,7 +4,7 @@ use tracing::{debug, error, info, instrument};
 
 use bytes::BytesMut;
 
-use crate::{Connection, Command};
+use crate::{Connection, Command, Db};
 
 pub struct Listener {
     listener: TcpListener
@@ -29,16 +29,23 @@ pub async fn run(listener: TcpListener, shutdown: impl Future) {
 
 impl Listener {
     pub async fn run(&mut self) -> crate::Result<()> {
+        let db = Db::new();
         loop {
             let (socket, addr) = self.listener.accept().await?;
             info!("A Connection accepted from addr: {:?}", addr);
 
             let mut connection = Connection::new(socket);
 
+            let cloned_db = db.clone();
+
             tokio::spawn(async move {
                 let frame = match connection.read().await {
                     Ok(Some(frame)) => frame,
-                    Ok(None) => return,
+                    Ok(None) => {
+                        debug!("Could not read");
+                        return
+                    },
+
                     Err(e) => {
                         error!(cause = ?e, "connection error");
                         return;
@@ -55,13 +62,14 @@ impl Listener {
 
                 debug!("Recived {:?}", cmd);
 
+                cmd.apply(&cloned_db);
+
+
             });
 
         }
     }
 }
-
-
 
 
 
