@@ -41,6 +41,14 @@ impl Command {
         parse.finish()?;
         return Ok(cmd);
     }
+
+
+    pub fn apply(self, db: &Db) -> crate::Result<()>{
+        match self {
+            Command::Get(cmd) => cmd.apply(db),
+            Command::Set(cmd) => cmd.apply(db)
+        }
+    }
 }
 
 
