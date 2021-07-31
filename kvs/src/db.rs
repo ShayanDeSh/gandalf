@@ -4,18 +4,22 @@ use bytes::Bytes;
 use uuid::Uuid;
 
 
+#[derive(Debug, Clone)]
 pub struct Db {
     shared: Arc<Shared>,
 }
 
+#[derive(Debug)]
 pub struct Shared {
     state: Mutex<State>,
 }
 
+#[derive(Debug)]
 pub struct State {
     kv: HashMap<String, Entity>,
 }
 
+#[derive(Debug)]
 pub struct Entity {
     id: Uuid,
     data: Bytes,
