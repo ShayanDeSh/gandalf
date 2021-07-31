@@ -21,6 +21,7 @@ pub mod command;
 pub use command::Command;
 
 pub mod db;
+pub use db::Db;
 
 pub const DEFAULT_PORT: &str = "9736";
 
