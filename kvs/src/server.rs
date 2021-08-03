@@ -47,31 +47,9 @@ impl Listener {
             };
 
             tokio::spawn(async move {
-                let frame = match handler.connection.read().await {
-                    Ok(Some(frame)) => frame,
-                    Ok(None) => {
-                        debug!("Could not read");
-                        return
-                    },
-
-                    Err(e) => {
-                        error!(cause = ?e, "connection error");
-                        return;
-                    }
-                };
-
-                let cmd = match Command::from_frame(frame) {
-                    Ok(cmd) => cmd,
-                    Err(e) => {
-                        error!(cause = ?e, "connection error");
-                        return;
-                    }
-                };
-
-                debug!("Recived {:?}", cmd);
-
-                cmd.apply(&handler.db);
-
+                if let Err(err) = handler.run().await {
+                    error!(cause = ?err, "connection error");
+                }
             });
         }
     }
@@ -112,11 +90,9 @@ impl Handler {
 
         debug!(?cmd);
 
-        cmd.apply(&self.db)?;
+        cmd.apply(&self.db, &mut self.connection).await?;
 
         Ok(())
     }
 }
-
-
 
