@@ -1,19 +1,28 @@
 use tokio::net::{TcpListener, TcpStream};
+use tokio::time::{self, Duration};
+
 use std::future::Future;
 use tracing::{debug, error, info, instrument};
 
 use bytes::BytesMut;
 
-use crate::{Connection, Command, Db};
+use crate::{Connection, Command, Db, DbGuard};
 
 pub struct Listener {
-    listener: TcpListener
+    listener: TcpListener,
+    db_guard: DbGuard
+}
+
+pub struct Handler {
+    db: Db,
+    connection: Connection,
 }
 
 
 pub async fn run(listener: TcpListener, shutdown: impl Future) {
     let mut listener = Listener {
         listener: listener,
+        db_guard: DbGuard::new()
     };
     tokio::select! {
         res = listener.run() => {
@@ -29,17 +38,16 @@ pub async fn run(listener: TcpListener, shutdown: impl Future) {
 
 impl Listener {
     pub async fn run(&mut self) -> crate::Result<()> {
-        let db = Db::new();
         loop {
-            let (socket, addr) = self.listener.accept().await?;
-            info!("A Connection accepted from addr: {:?}", addr);
+            let socket = self.accept().await?;
 
-            let mut connection = Connection::new(socket);
-
-            let cloned_db = db.clone();
+            let mut handler = Handler {
+                connection: Connection::new(socket),
+                db: self.db_guard.db()
+            };
 
             tokio::spawn(async move {
-                let frame = match connection.read().await {
+                let frame = match handler.connection.read().await {
                     Ok(Some(frame)) => frame,
                     Ok(None) => {
                         debug!("Could not read");
@@ -62,12 +70,51 @@ impl Listener {
 
                 debug!("Recived {:?}", cmd);
 
-                cmd.apply(&cloned_db);
-
+                cmd.apply(&handler.db);
 
             });
-
         }
+    }
+
+    pub async fn accept(&mut self) -> crate::Result<TcpStream> {
+        let mut backoff = 1;
+
+        loop {
+            match self.listener.accept().await {
+                Ok((socket, addr)) => {
+                    info!("A Connection accepted from addr: {:?}", addr);
+                    return Ok(socket)
+                }
+                Err(err) => {
+                    if backoff > 64 {
+                        return Err(err.into());
+                    }
+                }
+            }
+            time::sleep(Duration::from_secs(backoff)).await;
+
+            backoff *= 2;
+        }
+    }
+
+}
+
+
+impl Handler {
+    pub async fn run(&mut self) -> crate::Result<()> {
+        let maybe_frame = self.connection.read().await?;
+        let frame = match maybe_frame {
+            Some(frame) => frame,
+            None => return Ok(())
+        };
+
+        let cmd = Command::from_frame(frame)?;
+
+        debug!(?cmd);
+
+        cmd.apply(&self.db)?;
+
+        Ok(())
     }
 }
 
