@@ -4,6 +4,12 @@ use bytes::Bytes;
 use uuid::Uuid;
 
 
+#[derive(Debug)]
+pub struct DbGuard {
+    db: Db
+}
+
+
 #[derive(Debug, Clone)]
 pub struct Db {
     shared: Arc<Shared>,
@@ -24,6 +30,20 @@ pub struct Entity {
     id: Uuid,
     data: Bytes,
 }
+
+
+impl DbGuard {
+    pub fn new() -> DbGuard {
+        DbGuard {
+            db: Db::new()
+        }
+    }
+
+    pub fn db(&self) -> Db {
+        self.db.clone()
+    }
+}
+
 
 impl Db {
     pub fn new() -> Db {

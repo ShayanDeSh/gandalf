@@ -22,6 +22,7 @@ pub use command::Command;
 
 pub mod db;
 pub use db::Db;
+pub use db::DbGuard;
 
 pub const DEFAULT_PORT: &str = "9736";
 
