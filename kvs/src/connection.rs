@@ -66,7 +66,7 @@ impl Connection {
         }
     }
 
-    async fn write_frame(&mut self, frame: &Frame) -> io::Result<()> {
+    pub async fn write_frame(&mut self, frame: &Frame) -> io::Result<()> {
         match frame {
             Frame::Array(val) => {
                 self.stream.write_u8(b'*').await?;

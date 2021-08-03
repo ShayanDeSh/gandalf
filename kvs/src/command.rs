@@ -1,4 +1,4 @@
-use crate::{Frame, Parse, Db};
+use crate::{Frame, Parse, Db, Connection};
 
 use bytes::Bytes;
 
@@ -43,10 +43,10 @@ impl Command {
     }
 
 
-    pub fn apply(self, db: &Db) -> crate::Result<()>{
+    pub async fn apply(self, db: &Db, con: &mut Connection) -> crate::Result<()>{
         match self {
-            Command::Get(cmd) => cmd.apply(db),
-            Command::Set(cmd) => cmd.apply(db)
+            Command::Get(cmd) => cmd.apply(db, con).await,
+            Command::Set(cmd) => cmd.apply(db, con).await
         }
     }
 }
@@ -70,7 +70,7 @@ impl Get {
         &self.key
     }
 
-    pub fn apply(self, db: &Db) -> crate::Result<()> {
+    pub async fn apply(self, db: &Db, con: &mut Connection) -> crate::Result<()> {
         let response = if let Some(value) = db.get(&self.key) {
             Frame::Bulk(value)
         } else {
@@ -78,6 +78,7 @@ impl Get {
         };
 
         debug!(?response);
+        con.write_frame(&response).await?;
 
         Ok(())
     }
@@ -102,10 +103,13 @@ impl Set {
         })
     }
 
-    pub fn apply(self, db: &Db) -> crate::Result<()>{
+    pub async fn apply(self, db: &Db, con: &mut Connection) -> crate::Result<()>{
         db.set(self.key, self.value);
         let response = Frame::Simple("OK".into());
+
         debug!(?response);
+        con.write_frame(&response).await?;
+
         Ok(())
     }
 
@@ -117,5 +121,4 @@ impl Set {
         &self.value
     }
 }
-
 
