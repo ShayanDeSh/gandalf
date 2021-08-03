@@ -1,28 +1,31 @@
 use tokio::net::{TcpListener, TcpStream};
 use tokio::time::{self, Duration};
-
-use std::future::Future;
+use tokio::sync::{Semaphore};
 use tracing::{debug, error, info, instrument};
 
-use bytes::BytesMut;
+use std::future::Future;
+use std::sync::Arc;
 
-use crate::{Connection, Command, Db, DbGuard};
+use crate::{Connection, Command, Db, DbGuard, MAX_CONNECTIONS};
 
 pub struct Listener {
     listener: TcpListener,
-    db_guard: DbGuard
+    db_guard: DbGuard,
+    connection_limit: Arc<Semaphore>,
 }
 
 pub struct Handler {
     db: Db,
     connection: Connection,
+    connection_limit: Arc<Semaphore>,
 }
 
 
 pub async fn run(listener: TcpListener, shutdown: impl Future) {
     let mut listener = Listener {
         listener: listener,
-        db_guard: DbGuard::new()
+        db_guard: DbGuard::new(),
+        connection_limit: Arc::new(Semaphore::new(MAX_CONNECTIONS))
     };
     tokio::select! {
         res = listener.run() => {
@@ -39,11 +42,14 @@ pub async fn run(listener: TcpListener, shutdown: impl Future) {
 impl Listener {
     pub async fn run(&mut self) -> crate::Result<()> {
         loop {
+            self.connection_limit.acquire().await.unwrap().forget();
+            
             let socket = self.accept().await?;
 
             let mut handler = Handler {
                 connection: Connection::new(socket),
-                db: self.db_guard.db()
+                db: self.db_guard.db(),
+                connection_limit: self.connection_limit.clone()
             };
 
             tokio::spawn(async move {
@@ -93,6 +99,12 @@ impl Handler {
         cmd.apply(&self.db, &mut self.connection).await?;
 
         Ok(())
+    }
+}
+
+impl Drop for Handler {
+    fn drop(&mut self) {
+        self.connection_limit.add_permits(1);
     }
 }
 
