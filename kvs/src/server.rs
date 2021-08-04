@@ -115,7 +115,7 @@ impl Handler {
     pub async fn run(&mut self) -> crate::Result<()> {
         while !self.shutdown.is_shutdown() {
             let maybe_frame = tokio::select! {
-                res = self.connection.read().await => res?,
+                res = self.connection.read() => res?,
                 _   = self.shutdown.recv() => return Ok(())
             };
 
