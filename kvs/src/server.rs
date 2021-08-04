@@ -1,37 +1,42 @@
 use tokio::net::{TcpListener, TcpStream};
 use tokio::time::{self, Duration};
-use tokio::sync::{Semaphore, mpsc};
+use tokio::sync::{Semaphore, mpsc, broadcast};
 use tracing::{debug, error, info, instrument};
 
 use std::future::Future;
 use std::sync::Arc;
 
-use crate::{Connection, Command, Db, DbGuard, MAX_CONNECTIONS};
+use crate::{Connection, Command, Db, DbGuard, MAX_CONNECTIONS, Shutdown};
 
 pub struct Listener {
     listener: TcpListener,
     db_guard: DbGuard,
     connection_limit: Arc<Semaphore>,
     complete_rx: mpsc::Receiver<()>,
-    complete_tx: mpsc::Sender<()>
+    complete_tx: mpsc::Sender<()>,
+    shutdown_signal: broadcast::Sender<()> 
 }
 
 pub struct Handler {
     db: Db,
     connection: Connection,
     connection_limit: Arc<Semaphore>,
-    _complete_tx: mpsc::Sender<()>
+    _complete_tx: mpsc::Sender<()>,
+    shutdown: Shutdown
 }
 
 
 pub async fn run(listener: TcpListener, shutdown: impl Future) {
     let (complete_tx, complete_rx) = mpsc::channel(1);
+    let (shutdown_signal, _) = broadcast::channel(1); 
+
     let mut listener = Listener {
         listener: listener,
         db_guard: DbGuard::new(),
         connection_limit: Arc::new(Semaphore::new(MAX_CONNECTIONS)),
         complete_tx: complete_tx,
-        complete_rx: complete_rx
+        complete_rx: complete_rx,
+        shutdown_signal: shutdown_signal,
     };
 
     tokio::select! {
@@ -48,9 +53,11 @@ pub async fn run(listener: TcpListener, shutdown: impl Future) {
     let Listener {
         mut complete_rx,
         complete_tx,
+        shutdown_signal,
         ..
     } = listener;
 
+    drop(shutdown_signal);
     drop(complete_tx);
 
     complete_rx.recv().await;
@@ -63,11 +70,13 @@ impl Listener {
             
             let socket = self.accept().await?;
 
+
             let mut handler = Handler {
                 connection: Connection::new(socket),
                 db: self.db_guard.db(),
                 connection_limit: self.connection_limit.clone(),
-                _complete_tx: self.complete_tx.clone()
+                _complete_tx: self.complete_tx.clone(),
+                shutdown: Shutdown::new(self.shutdown_signal.subscribe())
             };
 
             tokio::spawn(async move {
@@ -104,18 +113,24 @@ impl Listener {
 
 impl Handler {
     pub async fn run(&mut self) -> crate::Result<()> {
-        let maybe_frame = self.connection.read().await?;
-        let frame = match maybe_frame {
-            Some(frame) => frame,
-            None => return Ok(())
-        };
+        while !self.shutdown.is_shutdown() {
+            let maybe_frame = tokio::select! {
+                res = self.connection.read().await => res?,
+                _   = self.shutdown.recv() => return Ok(())
+            };
 
-        let cmd = Command::from_frame(frame)?;
+            let frame = match maybe_frame {
+                Some(frame) => frame,
+                None => return Ok(())
+            };
 
-        debug!(?cmd);
+            let cmd = Command::from_frame(frame)?;
 
-        cmd.apply(&self.db, &mut self.connection).await?;
+            debug!(?cmd);
 
+            cmd.apply(&self.db, &mut self.connection).await?;
+
+        }
         Ok(())
     }
 }
