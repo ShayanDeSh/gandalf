@@ -1,6 +1,6 @@
 use tokio::net::{TcpListener, TcpStream};
 use tokio::time::{self, Duration};
-use tokio::sync::{Semaphore};
+use tokio::sync::{Semaphore, mpsc};
 use tracing::{debug, error, info, instrument};
 
 use std::future::Future;
@@ -12,21 +12,28 @@ pub struct Listener {
     listener: TcpListener,
     db_guard: DbGuard,
     connection_limit: Arc<Semaphore>,
+    complete_rx: mpsc::Receiver<()>,
+    complete_tx: mpsc::Sender<()>
 }
 
 pub struct Handler {
     db: Db,
     connection: Connection,
     connection_limit: Arc<Semaphore>,
+    _complete_tx: mpsc::Sender<()>
 }
 
 
 pub async fn run(listener: TcpListener, shutdown: impl Future) {
+    let (complete_tx, complete_rx) = mpsc::channel(1);
     let mut listener = Listener {
         listener: listener,
         db_guard: DbGuard::new(),
-        connection_limit: Arc::new(Semaphore::new(MAX_CONNECTIONS))
+        connection_limit: Arc::new(Semaphore::new(MAX_CONNECTIONS)),
+        complete_tx: complete_tx,
+        complete_rx: complete_rx
     };
+
     tokio::select! {
         res = listener.run() => {
             if let Err(err) = res {
@@ -37,6 +44,16 @@ pub async fn run(listener: TcpListener, shutdown: impl Future) {
             info!("Shutting down");
         }
     }
+
+    let Listener {
+        mut complete_rx,
+        complete_tx,
+        ..
+    } = listener;
+
+    drop(complete_tx);
+
+    complete_rx.recv().await;
 }
 
 impl Listener {
@@ -49,7 +66,8 @@ impl Listener {
             let mut handler = Handler {
                 connection: Connection::new(socket),
                 db: self.db_guard.db(),
-                connection_limit: self.connection_limit.clone()
+                connection_limit: self.connection_limit.clone(),
+                _complete_tx: self.complete_tx.clone()
             };
 
             tokio::spawn(async move {
