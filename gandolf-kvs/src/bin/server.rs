@@ -1,4 +1,4 @@
-use kvs::server;
+use gandolf_kvs::server;
 
 use structopt::StructOpt;
 use tokio::net::TcpListener;
@@ -8,11 +8,11 @@ use tracing::{info, Level};
 use tracing_subscriber;
 
 #[tokio::main]
-pub async fn main() -> Result<(), kvs::Error> {
+pub async fn main() -> Result<(), gandolf_kvs::Error> {
     tracing_subscriber::fmt::try_init()?;
 
     let cli = Cli::from_args();
-    let port: &str = cli.port.as_deref().unwrap_or(kvs::DEFAULT_PORT);
+    let port: &str = cli.port.as_deref().unwrap_or(gandolf_kvs::DEFAULT_PORT);
     let listener = TcpListener::bind(&format!("127.0.0.1:{}", port)).await?;
 
     info!("Listening to {:?}", port);

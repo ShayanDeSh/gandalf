@@ -1,5 +1,5 @@
 [package]
-name = "kvs"
+name = "gandolf-kvs"
 version = "0.1.0"
 authors = ["shayandesh <shayandesh@gmail.com>"]
 edition = "2018"
