@@ -1,4 +1,5 @@
 use uuid::Uuid;
+use std::net::Ipv4Addr;
 
 pub mod raft_rpc {
     tonic::include_proto!("raft_rpc");
@@ -13,3 +14,10 @@ pub type Error = Box<dyn std::error::Error + Send + Sync>;
 pub type Result<T> = std::result::Result<T, Error>;
 
 pub type NodeID = Uuid;
+
+#[derive(Debug)]
+pub struct Node {
+    id: NodeID,
+    ip: Ipv4Addr,
+    port: u16,
+}
