@@ -30,18 +30,19 @@ pub struct Raft {
     last_applied: u64,
     voted_for: Option<NodeID>,
     all_nodes: HashSet<Node>,
-    rx_rpc: mpsc::UnboundedReceiver<RaftMessage>
+    rx_rpc: mpsc::UnboundedReceiver<RaftMessage>,
+    election_timeout: u64,
 }
 
 #[derive(Debug)]
 struct Follower <'a> {
-    raft: &'a mut Raft,
-    election_timeout: u64
+    raft: &'a mut Raft
 }
 
 #[derive(Debug)]
 struct Candidate <'a> {
-    raft: &'a mut Raft
+    raft: &'a mut Raft,
+    number_of_votes: u32
 }
 
 
@@ -72,7 +73,8 @@ impl Raft {
             last_applied: 0,
             voted_for: None,
             all_nodes: nodes,
-            rx_rpc: rx_rpc
+            rx_rpc: rx_rpc,
+            election_timeout: 1500
         }
     }
 
@@ -80,7 +82,7 @@ impl Raft {
         loop {
             match self.state {
                 State::Follower => {
-                    Follower::new(self, 1500).run().await?;
+                    Follower::new(self).run().await?;
                 },
                 State::Candidate => {
                     Candidate::new(self).run().await?;
@@ -104,13 +106,18 @@ impl Raft {
         self.state = state;
     }
 
+    fn generate_timeout(&self) -> Instant {
+        let random = thread_rng().
+            gen_range(self.election_timeout..self.election_timeout * 2);
+        Instant::now() + Duration::from_millis(random)
+    }
+
 }
 
 impl<'a> Follower<'a> {
-    pub fn new(raft: &'a mut Raft, election_timeout: u64) -> Follower {
+    pub fn new(raft: &'a mut Raft) -> Follower {
         Follower {
-            raft: raft,
-            election_timeout: election_timeout
+            raft: raft
         }
     }
 
@@ -118,10 +125,10 @@ impl<'a> Follower<'a> {
     pub async fn run(&mut self) -> crate::Result<()> {
         debug!("Running at Follower State");
         while self.is_follower() {
-            let time_out = sleep_until(self.generate_timeout());
+            let election_timeout = sleep_until(self.raft.generate_timeout());
 
             tokio::select! {
-                _ = time_out => self.raft.set_state(State::Candidate),
+                _ = election_timeout => self.raft.set_state(State::Candidate),
             }
         }
 
