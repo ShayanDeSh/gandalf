@@ -10,7 +10,7 @@ struct RaftRpcService;
 #[tonic::async_trait]
 impl RaftRpc for RaftRpcService {
     async fn append_entries(&self,
-        request: Request<tonic::Streaming<AppendEntriesRequest>>) ->
+        request: Request<AppendEntriesRequest>) ->
         Result<Response<AppendEntriesResponse>, Status> {
         unimplemented!();
     }

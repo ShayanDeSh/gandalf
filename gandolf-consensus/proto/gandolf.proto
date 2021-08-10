@@ -4,7 +4,7 @@ package raft_rpc;
 
 service RaftRpc {
 
-    rpc AppendEntries(stream AppendEntriesRequest) returns (AppendEntriesResponse) {}
+    rpc AppendEntries(AppendEntriesRequest) returns (AppendEntriesResponse) {}
 
     rpc RequestVote(RequestVoteRequest) returns (RequestVoteResponse) {}
 
