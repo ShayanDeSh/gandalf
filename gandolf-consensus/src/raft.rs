@@ -164,14 +164,23 @@ impl<'a> Candidate<'a> {
     }
 
     pub async fn run(&mut self) -> crate::Result<()> {
-        self.raft.current_term += 1;
+        while self.is_candidate() {
+            self.raft.current_term += 1;
 
-        self.raft.voted_for = Some(self.raft.id);
-        let number_of_votes = 1;
+            self.raft.voted_for = Some(self.raft.id);
+            let number_of_votes: u16 = 1;
 
-        let election_timeout = self.raft.generate_timeout();
+            let election_timeout = self.raft.generate_timeout();
 
-        self.ask_for_votes();
+            let vote_rx = self.ask_for_votes();
+
+            while self.is_candidate() {
+                tokio::select! {
+                    _ = election_timeout => break,
+                    Some(response) = vote_rx.recv() => self.handle_vote(response),
+                }
+            }
+        }
 
         Ok(())
     }
@@ -195,7 +204,8 @@ impl<'a> Candidate<'a> {
                 async move {
                     match ask_for_vote(node, request).await {
                         Ok(response) =>  tx.send(response).await,
-                        Err(e) => error!(err=e, "Error in comunicating with {:?}", node)
+                        Err(e) => error!(err=e,
+                            "Error in comunicating with {:?}", node)
                     }
                 }
             );
@@ -204,6 +214,31 @@ impl<'a> Candidate<'a> {
         return rx;
     }
 
+    fn handle_vote(&self, response: RequestVoteResponse) -> crate::Result<()> {
+        if response.term > self.raft.current_term {
+            self.raft.set_state(State::Follower);
+            self.raft.current_term = response.term;
+            self.raft.current_leader = None;
+            self.raft.voted_for = None;
+            return Ok(());
+        }
+
+        if response.vote_granted {
+            self.number_of_votes += 1;
+            if self.has_enough_vote() {
+                self.raft.set_state(State::Leader);
+            }
+        }
+
+        Ok(())
+    }
+
+    fn has_enough_vote(&self) -> bool {
+        self.number_of_votes > (self.raft.nodes.len() as u32) / 2 
+    }
+
+    fn is_candidate(&self) -> bool {
+        self.raft.state == State::Candidate
+    }
+
 }
-
-
