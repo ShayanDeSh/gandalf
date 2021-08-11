@@ -15,7 +15,7 @@ pub type Result<T> = std::result::Result<T, Error>;
 
 pub type NodeID = Uuid;
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Node {
     id: NodeID,
     ip: Ipv4Addr,
