@@ -1,5 +1,6 @@
 use std::future::Future;
 use std::collections::HashSet;
+
 use rand::{thread_rng, Rng};
 
 use tokio::time::{sleep_until, Duration, Instant};
@@ -9,6 +10,9 @@ use tracing::{debug, info, error};
 use tracing::instrument;
 
 use crate::{NodeID, Node};
+
+use crate::rpc::ask_for_vote;
+use crate::raft_rpc::{RequestVoteRequest, RequestVoteResponse};
 
 #[derive(Debug, PartialEq, Eq)]
 pub enum State {
@@ -28,8 +32,11 @@ pub struct Raft {
     current_term: u64,
     commit_index: u64,
     last_applied: u64,
+    last_log_index: u64,
+    last_log_term: u64,
     voted_for: Option<NodeID>,
-    all_nodes: HashSet<Node>,
+    current_leader: Option<NodeID>,
+    nodes: HashSet<Node>,
     rx_rpc: mpsc::UnboundedReceiver<RaftMessage>,
     election_timeout: u64,
 }
@@ -71,8 +78,11 @@ impl Raft {
             current_term: 0,
             commit_index: 0,
             last_applied: 0,
+            last_log_index: 0,
+            last_log_term: 0,
             voted_for: None,
-            all_nodes: nodes,
+            current_leader: None,
+            nodes: nodes,
             rx_rpc: rx_rpc,
             election_timeout: 1500
         }
@@ -112,6 +122,10 @@ impl Raft {
         Instant::now() + Duration::from_millis(random)
     }
 
+    fn get_all_nodes(&self) -> HashSet<Node> {
+        self.nodes.clone()
+    }
+
 }
 
 impl<'a> Follower<'a> {
@@ -139,21 +153,57 @@ impl<'a> Follower<'a> {
         self.raft.state == State::Follower
     }
 
-    fn generate_timeout(&self) -> Instant {
-        let random = thread_rng().
-            gen_range(self.election_timeout..self.election_timeout * 2);
-        Instant::now() + Duration::from_millis(random)
-    }
 }
 
 impl<'a> Candidate<'a> {
     pub fn new(raft: &'a mut Raft) -> Candidate {
         Candidate {
-            raft: raft
+            raft: raft,
+            number_of_votes: 0
         }
     }
 
     pub async fn run(&mut self) -> crate::Result<()> {
-        unimplemented!();
+        self.raft.current_term += 1;
+
+        self.raft.voted_for = Some(self.raft.id);
+        let number_of_votes = 1;
+
+        let election_timeout = self.raft.generate_timeout();
+
+        self.ask_for_votes();
+
+        Ok(())
     }
+
+    pub fn ask_for_votes(&self) -> mpsc::Receiver<RequestVoteResponse> {
+        let nodes = self.raft.get_all_nodes();
+
+        let len = nodes.len();
+
+        let (tx, rx) = mpsc::channel(len);
+
+        for node in nodes.into_iter() {
+            let res_tx = tx.clone();
+            let request = RequestVoteRequest {
+                term: self.raft.current_term,
+                candidate_id: self.raft.id.to_string(),
+                last_log_index: self.raft.last_log_index,
+                last_log_term: self.raft.last_log_term
+            };
+            let _ = tokio::spawn(
+                async move {
+                    match ask_for_vote(node, request).await {
+                        Ok(response) =>  tx.send(response).await,
+                        Err(e) => error!(err=e, "Error in comunicating with {:?}", node)
+                    }
+                }
+            );
+        }
+
+        return rx;
+    }
+
 }
+
+
