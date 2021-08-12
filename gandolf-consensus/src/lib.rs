@@ -31,5 +31,13 @@ pub enum RaftMessage {
     VoteResp {
         payload: raft_rpc::RequestVoteResponse,
         status: Option<tonic::Status>
+    },
+    AppendMsg {
+        body: raft_rpc::AppendEntriesRequest,
+        tx: oneshot::Sender<RaftMessage>
+    },
+    AppendResp {
+        payload: raft_rpc::AppendEntriesResponse,
+        status: Option<tonic::Status>
     }
 }
