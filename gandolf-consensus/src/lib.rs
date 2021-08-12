@@ -26,6 +26,10 @@ pub struct Node {
 pub enum RaftMessage {
     VoteMsg {
         body: raft_rpc::RequestVoteRequest,
-        tx: oneshot::Sender<raft_rpc::RequestVoteResponse>
+        tx: oneshot::Sender<RaftMessage>
+    },
+    VoteResp {
+        payload: raft_rpc::RequestVoteResponse,
+        status: Option<tonic::Status>
     }
 }
