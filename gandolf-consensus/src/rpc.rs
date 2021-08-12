@@ -6,9 +6,9 @@ use crate::raft_rpc::raft_rpc_client::RaftRpcClient;
 use crate::raft_rpc::{AppendEntriesRequest, Entry, AppendEntriesResponse};
 use crate::raft_rpc::{RequestVoteRequest, RequestVoteResponse};
 
-use crate::{Node, NodeID, RaftMessage};
+use crate::{Node, RaftMessage};
 
-use tokio::sync::{mpsc};
+use tokio::sync::{mpsc, oneshot};
 
 #[derive(Debug)]
 pub struct RaftRpcService {
@@ -34,7 +34,27 @@ impl RaftRpc for RaftRpcService {
 
     async fn request_vote(&self, request: Request<RequestVoteRequest>) -> 
         Result<Response<RequestVoteResponse>, Status> {
-            unimplemented!();
+            let (tx, rx) = oneshot::channel();
+            let resp = self.tx_rpc.send(RaftMessage::VoteMsg{
+                body: request.into_inner(),
+                tx: tx
+            });
+            if let Err(err) = resp {
+                return Err(Status::internal(err.to_string()));
+            }
+            let resp = match rx.await {
+                Ok(msg) => msg,
+                Err(err) => return Err(Status::internal(err.to_string()))
+            };
+            match resp {
+                RaftMessage::VoteResp{payload, status} => {
+                    if let Some(status) = status {
+                        return Err(status);
+                    }
+                    return Ok(Response::new(payload));
+                },
+                _ => {return Err(Status::unknown("Unkown response recived"));}
+            }
     }
 }
 
