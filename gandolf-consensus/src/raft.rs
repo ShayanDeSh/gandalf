@@ -9,7 +9,7 @@ use tokio::sync::{mpsc};
 use tracing::{debug, info, error};
 use tracing::instrument;
 
-use crate::{NodeID, Node};
+use crate::{NodeID, Node, RaftMessage};
 
 use crate::rpc::ask_for_vote;
 use crate::raft_rpc::{RequestVoteRequest, RequestVoteResponse};
@@ -22,8 +22,6 @@ pub enum State {
     NonVoter
 }
 
-pub enum RaftMessage {
-}
 
 #[derive(Debug)]
 pub struct Raft {
@@ -54,7 +52,7 @@ struct Candidate <'a> {
 
 
 pub async fn run(shutdown: impl Future) {
-    let (_tx_rpc, rx_rpc) = mpsc::unbounded_channel();
+    let (tx_rpc, rx_rpc) = mpsc::unbounded_channel();
 
     let mut raft = Raft::new(HashSet::new(), rx_rpc);
     tokio::select! {
