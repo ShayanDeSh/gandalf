@@ -37,7 +37,7 @@ pub enum RaftMessage {
         tx: oneshot::Sender<RaftMessage>
     },
     AppendResp {
-        payload: raft_rpc::AppendEntriesResponse,
+        payload: Option<raft_rpc::AppendEntriesResponse>,
         status: Option<tonic::Status>
     }
 }

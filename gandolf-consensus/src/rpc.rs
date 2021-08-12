@@ -45,7 +45,7 @@ impl RaftRpc for RaftRpcService {
                 if let Some(status) = status {
                     return Err(status);
                 }
-                return Ok(Response::new(payload));
+                return Ok(Response::new(payload.unwrap()));
             },
             _ => {return Err(Status::unknown("Unkown response recived"));}
         }
