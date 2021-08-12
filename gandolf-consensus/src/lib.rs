@@ -1,5 +1,6 @@
 use uuid::Uuid;
 use std::net::Ipv4Addr;
+use tokio::sync::{oneshot};
 
 pub mod raft_rpc {
     tonic::include_proto!("raft_rpc");
@@ -20,4 +21,11 @@ pub struct Node {
     id: NodeID,
     ip: Ipv4Addr,
     port: u16,
+}
+
+pub enum RaftMessage {
+    VoteMsg {
+        body: raft_rpc::RequestVoteRequest,
+        tx: oneshot::Sender<raft_rpc::RequestVoteResponse>
+    }
 }
