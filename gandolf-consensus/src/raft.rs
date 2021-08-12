@@ -181,7 +181,7 @@ impl<'a> Candidate<'a> {
             self.raft.current_term += 1;
 
             self.raft.voted_for = Some(self.raft.id);
-            let number_of_votes: u16 = 1;
+            self.number_of_votes = 1;
 
 
             let mut vote_rx = self.ask_for_votes();
