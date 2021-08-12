@@ -6,13 +6,19 @@ use rand::{thread_rng, Rng};
 use tokio::time::{sleep_until, Duration, Instant};
 use tokio::sync::{mpsc};
 
+use std::net::SocketAddr;
+
+use tonic::transport::Server;
+use tonic::{Request, Response};
+
 use tracing::{debug, info, error};
 use tracing::instrument;
 
 use crate::{NodeID, Node, RaftMessage};
 
-use crate::rpc::ask_for_vote;
+use crate::rpc::{ask_for_vote, RaftRpcService};
 use crate::raft_rpc::{RequestVoteRequest, RequestVoteResponse};
+use crate::raft_rpc::raft_rpc_server::{RaftRpcServer};
 
 #[derive(Debug, PartialEq, Eq)]
 pub enum State {
@@ -51,8 +57,17 @@ struct Candidate <'a> {
 }
 
 
-pub async fn run(shutdown: impl Future) {
+pub async fn run(shutdown: impl Future, addr: SocketAddr) {
     let (tx_rpc, rx_rpc) = mpsc::unbounded_channel();
+
+    let raft_rpc = RaftRpcService::new(tx_rpc);
+
+    let svc = RaftRpcServer::new(raft_rpc);
+
+    tokio::spawn(async move {
+            Server::builder().add_service(svc).serve(addr).await;
+        }
+    );
 
     let mut raft = Raft::new(HashSet::new(), rx_rpc);
     tokio::select! {
@@ -168,14 +183,14 @@ impl<'a> Candidate<'a> {
             self.raft.voted_for = Some(self.raft.id);
             let number_of_votes: u16 = 1;
 
-            let election_timeout = self.raft.generate_timeout();
 
-            let vote_rx = self.ask_for_votes();
+            let mut vote_rx = self.ask_for_votes();
 
             while self.is_candidate() {
+                let election_timeout = sleep_until(self.raft.generate_timeout());
                 tokio::select! {
                     _ = election_timeout => break,
-                    Some(response) = vote_rx.recv() => self.handle_vote(response),
+                    Some(response) = vote_rx.recv() => self.handle_vote(response)?,
                 }
             }
         }
@@ -200,10 +215,11 @@ impl<'a> Candidate<'a> {
             };
             let _ = tokio::spawn(
                 async move {
-                    match ask_for_vote(node, request).await {
-                        Ok(response) =>  tx.send(response).await,
-                        Err(e) => error!(err=e,
-                            "Error in comunicating with {:?}", node)
+                    match ask_for_vote(&node, request).await {
+                        Ok(response) =>  {
+                            let _ = res_tx.send(response).await;
+                        },
+                        Err(e) => error!(err=%e,"Error in comunicating with {:?}", node)
                     }
                 }
             );
@@ -212,7 +228,7 @@ impl<'a> Candidate<'a> {
         return rx;
     }
 
-    fn handle_vote(&self, response: RequestVoteResponse) -> crate::Result<()> {
+    fn handle_vote(&mut self, response: RequestVoteResponse) -> crate::Result<()> {
         if response.term > self.raft.current_term {
             self.raft.set_state(State::Follower);
             self.raft.current_term = response.term;
