@@ -23,38 +23,57 @@ impl RaftRpcService {
     }
 }
 
-
 #[tonic::async_trait]
 impl RaftRpc for RaftRpcService {
     async fn append_entries(&self,
         request: Request<AppendEntriesRequest>) ->
         Result<Response<AppendEntriesResponse>, Status> {
-        unimplemented!();
+        let (tx, rx) = oneshot::channel();
+        let resp = self.tx_rpc.send(RaftMessage::AppendMsg{
+            body: request.into_inner(),
+            tx: tx
+        });
+        if let Err(err) = resp {
+            return Err(Status::internal(err.to_string()));
+        }
+        let resp = match rx.await {
+            Ok(msg) => msg,
+            Err(err) => return Err(Status::internal(err.to_string()))
+        };
+        match resp {
+            RaftMessage::AppendResp{payload, status} => {
+                if let Some(status) = status {
+                    return Err(status);
+                }
+                return Ok(Response::new(payload));
+            },
+            _ => {return Err(Status::unknown("Unkown response recived"));}
+        }
     }
 
-    async fn request_vote(&self, request: Request<RequestVoteRequest>) -> 
-        Result<Response<RequestVoteResponse>, Status> {
-            let (tx, rx) = oneshot::channel();
-            let resp = self.tx_rpc.send(RaftMessage::VoteMsg{
-                body: request.into_inner(),
-                tx: tx
-            });
-            if let Err(err) = resp {
-                return Err(Status::internal(err.to_string()));
-            }
-            let resp = match rx.await {
-                Ok(msg) => msg,
-                Err(err) => return Err(Status::internal(err.to_string()))
-            };
-            match resp {
-                RaftMessage::VoteResp{payload, status} => {
-                    if let Some(status) = status {
-                        return Err(status);
-                    }
-                    return Ok(Response::new(payload));
-                },
-                _ => {return Err(Status::unknown("Unkown response recived"));}
-            }
+    async fn request_vote(&self, request: Request<RequestVoteRequest>) 
+        -> Result<Response<RequestVoteResponse>, Status> {
+        let (tx, rx) = oneshot::channel();
+        let resp = self.tx_rpc.send(RaftMessage::VoteMsg{
+            body: request.into_inner(),
+            tx: tx
+        });
+        if let Err(err) = resp {
+            return Err(Status::internal(err.to_string()));
+        }
+        let resp = match rx.await {
+            Ok(msg) => msg,
+            Err(err) => return Err(Status::internal(err.to_string()))
+        };
+        match resp {
+            RaftMessage::VoteResp{payload, status} => {
+                if let Some(status) = status {
+                    return Err(status);
+                }
+                return Ok(Response::new(payload));
+            },
+            _ => {return Err(Status::unknown("Unkown response recived"));}
+        }
     }
 }
 
