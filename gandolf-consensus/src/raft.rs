@@ -18,6 +18,7 @@ use crate::{NodeID, Node, RaftMessage};
 
 use crate::rpc::{ask_for_vote, RaftRpcService};
 use crate::raft_rpc::{RequestVoteRequest, RequestVoteResponse};
+use crate::raft_rpc::{AppendEntriesRequest, AppendEntriesResponse};
 use crate::raft_rpc::raft_rpc_server::{RaftRpcServer};
 
 #[derive(Debug, PartialEq, Eq)]
@@ -183,7 +184,6 @@ impl<'a> Candidate<'a> {
             self.raft.voted_for = Some(self.raft.id);
             self.number_of_votes = 1;
 
-
             let mut vote_rx = self.ask_for_votes();
 
             while self.is_candidate() {
@@ -191,11 +191,35 @@ impl<'a> Candidate<'a> {
                 tokio::select! {
                     _ = election_timeout => break,
                     Some(response) = vote_rx.recv() => self.handle_vote(response)?,
+                    Some(request)  = self.raft.rx_rpc.recv() => self.handle_api_request(request),
                 }
             }
         }
 
         Ok(())
+    }
+
+    fn handle_api_request(&self, request: RaftMessage) {
+        match request {
+            RaftMessage::VoteMsg{tx, ..} => {
+                let resp = RaftMessage::VoteResp {
+                    status: None,
+                    payload: RequestVoteResponse {
+                        term: self.raft.current_term,
+                        vote_granted: false
+                    }
+                };
+                let _ = tx.send(resp);
+            }
+            RaftMessage::AppendMsg{tx, ..} => {
+                let resp = RaftMessage::AppendResp {
+                    status: Some(tonic::Status::cancelled("Node is in Candidate state")),
+                    payload: None 
+                };
+                let _ = tx.send(resp);
+            },
+            _ => unreachable!(),
+        }
     }
 
     pub fn ask_for_votes(&self) -> mpsc::Receiver<RequestVoteResponse> {
