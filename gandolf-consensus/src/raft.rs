@@ -16,7 +16,7 @@ use tracing::instrument;
 
 use crate::{NodeID, Node, RaftMessage};
 
-use crate::rpc::{ask_for_vote, RaftRpcService};
+use crate::rpc::{self, ask_for_vote, RaftRpcService};
 use crate::raft_rpc::{RequestVoteRequest, RequestVoteResponse};
 use crate::raft_rpc::{AppendEntriesRequest, AppendEntriesResponse};
 use crate::raft_rpc::raft_rpc_server::{RaftRpcServer};
@@ -298,7 +298,12 @@ impl<'a> Leader<'a> {
     pub async fn run(&self) -> crate::Result<()> {
         while self.is_leader() {
             let next_heart_beat = Instant::now() + self.heart_beat_rate;
+            let next_heart_beat = sleep_until(next_heart_beat);
+
             tokio::select! {
+                _ = next_heart_beat => {
+                    self.beat().await?;
+                }
             }
         }
         Ok(())
@@ -308,7 +313,29 @@ impl<'a> Leader<'a> {
         self.raft.state == State::Leader
     }
 
-    pub async fn beat(&self) {
-        unimplemented!();
+    pub async fn beat(&self) -> crate::Result<()> {
+        let nodes = self.raft.get_all_nodes().into_iter();
+        for node in nodes {
+            // TODO:
+            // Must get prev_log_term and prev_log_term form tracker
+            // Just left it 0 for now
+            let request = AppendEntriesRequest {
+                term: self.raft.current_term,
+                leader_id: self.raft.id.to_string(),
+                prev_log_index: 0,
+                prev_log_term: 0,
+                entries: vec![]
+            };
+            tokio::spawn(async move {
+                let response = rpc::append_entries(&node, request).await;
+                match response {
+                    // TODO:
+                    // The response must be handled
+                    Ok(resp) => debug!("recived {:?} from {:?}", resp, node),
+                    Err(err) => error!(cause = %err, "Caused an error: ")
+                }
+            });
+        }
+        Ok(())
     }
 }
