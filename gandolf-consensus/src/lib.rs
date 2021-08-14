@@ -1,6 +1,11 @@
 use uuid::Uuid;
-use std::net::Ipv4Addr;
+use std::net::{IpAddr, SocketAddr};
 use tokio::sync::{oneshot};
+use std::collections::HashSet;
+
+pub const DEFAULT_PORT: &str = "7899";
+pub const HEARTBEAT: &str = "500";
+pub const TIMEOUT: &str = "1500";
 
 pub mod raft_rpc {
     tonic::include_proto!("raft_rpc");
@@ -16,10 +21,10 @@ pub type Result<T> = std::result::Result<T, Error>;
 
 pub type NodeID = Uuid;
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Hash, Eq, PartialEq)]
 pub struct Node {
-    id: NodeID,
-    ip: Ipv4Addr,
+    id: Option<NodeID>,
+    ip: IpAddr,
     port: u16,
 }
 
@@ -39,5 +44,44 @@ pub enum RaftMessage {
     AppendResp {
         payload: Option<raft_rpc::AppendEntriesResponse>,
         status: Option<tonic::Status>
+    }
+}
+
+pub struct ConfigMap {
+    host: String,
+    port: u16,
+    nodes: HashSet<Node>,
+    heartbeat: u64,
+    timeout: u64
+}
+
+impl Node {
+    pub fn new(id: Option<NodeID>, ip: IpAddr, port: u16) -> Node {
+        Node {
+            id: id,
+            ip: ip,
+            port: port
+        }
+    }
+}
+
+impl ConfigMap {
+    pub fn new(host: String, port: u16, nodes_raw: Vec<String>, heartbeat: u64,
+        timeout: u64) -> ConfigMap {
+
+        let mut nodes = HashSet::new();
+
+        for node_raw in nodes_raw.into_iter() {
+            let node: SocketAddr = node_raw.parse().unwrap();
+            nodes.insert(Node::new(None, node.ip(), node.port()));
+        }
+
+        ConfigMap {
+            host: host,
+            port: port,
+            nodes: nodes,
+            heartbeat: heartbeat,
+            timeout: timeout
+        }
     }
 }
