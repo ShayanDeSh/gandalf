@@ -6,15 +6,12 @@ use rand::{thread_rng, Rng};
 use tokio::time::{sleep_until, Duration, Instant};
 use tokio::sync::{mpsc};
 
-use std::net::SocketAddr;
-
 use tonic::transport::Server;
-use tonic::{Request, Response};
 
 use tracing::{debug, info, error};
 use tracing::instrument;
 
-use crate::{NodeID, Node, RaftMessage};
+use crate::{NodeID, Node, RaftMessage, ConfigMap};
 
 use crate::rpc::{self, ask_for_vote, RaftRpcService};
 use crate::raft_rpc::{RequestVoteRequest, RequestVoteResponse};
@@ -44,6 +41,7 @@ pub struct Raft {
     nodes: HashSet<Node>,
     rx_rpc: mpsc::UnboundedReceiver<RaftMessage>,
     election_timeout: u64,
+    heartbeat: Duration
 }
 
 #[derive(Debug)]
@@ -59,12 +57,13 @@ struct Candidate <'a> {
 
 #[derive(Debug)]
 struct Leader <'a> {
-    raft: &'a mut Raft,
-    heart_beat_rate: Duration
+    raft: &'a mut Raft
 }
 
 
-pub async fn run(shutdown: impl Future, addr: SocketAddr) {
+pub async fn run(shutdown: impl Future, config: ConfigMap) -> crate::Result<()> {
+    let addr = format!("{:?}:{:?}", config.host, config.port).parse()?;
+
     let (tx_rpc, rx_rpc) = mpsc::unbounded_channel();
 
     let raft_rpc = RaftRpcService::new(tx_rpc);
@@ -72,11 +71,11 @@ pub async fn run(shutdown: impl Future, addr: SocketAddr) {
     let svc = RaftRpcServer::new(raft_rpc);
 
     tokio::spawn(async move {
-            Server::builder().add_service(svc).serve(addr).await;
+            let _ = Server::builder().add_service(svc).serve(addr).await;
         }
     );
 
-    let mut raft = Raft::new(HashSet::new(), rx_rpc);
+    let mut raft = Raft::new(config, rx_rpc);
     tokio::select! {
         res = raft.run() => {
             if let Err(err) = res {
@@ -87,11 +86,11 @@ pub async fn run(shutdown: impl Future, addr: SocketAddr) {
             info!("Shutting down the server");
         }
     }
+    Ok(())
 }
 
 impl Raft {
-    pub fn new(nodes: HashSet<Node>,
-        rx_rpc: mpsc::UnboundedReceiver<RaftMessage>) -> Raft {
+    pub fn new(config: ConfigMap, rx_rpc: mpsc::UnboundedReceiver<RaftMessage>) -> Raft {
         Raft {
             id: NodeID::new_v4(),
             state: State::Follower,
@@ -102,9 +101,10 @@ impl Raft {
             last_log_term: 0,
             voted_for: None,
             current_leader: None,
-            nodes: nodes,
+            nodes: config.nodes,
             rx_rpc: rx_rpc,
-            election_timeout: 1500
+            election_timeout: config.timeout,
+            heartbeat: Duration::from_millis(config.heartbeat)
         }
     }
 
@@ -119,7 +119,7 @@ impl Raft {
                     return Ok(());
                 },
                 State::Leader => {
-                    Leader::new(self, 750).run().await?;
+                    Leader::new(self).run().await?;
                     return Ok(());
                 },
                 State::NonVoter => {
@@ -288,16 +288,15 @@ impl<'a> Candidate<'a> {
 }
 
 impl<'a> Leader<'a> {
-    pub fn new(raft:&'a mut Raft, heart_beat_rate: u64) -> Leader {
+    pub fn new(raft:&'a mut Raft) -> Leader {
         Leader {
-            raft: raft,
-            heart_beat_rate: Duration::from_millis(heart_beat_rate)
+            raft: raft
         }
     }
 
     pub async fn run(&self) -> crate::Result<()> {
         while self.is_leader() {
-            let next_heart_beat = Instant::now() + self.heart_beat_rate;
+            let next_heart_beat = Instant::now() + self.raft.heartbeat;
             let next_heart_beat = sleep_until(next_heart_beat);
 
             tokio::select! {
