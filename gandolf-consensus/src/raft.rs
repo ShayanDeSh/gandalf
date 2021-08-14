@@ -57,6 +57,12 @@ struct Candidate <'a> {
     number_of_votes: u32
 }
 
+#[derive(Debug)]
+struct Leader <'a> {
+    raft: &'a mut Raft,
+    heart_beat_rate: Duration
+}
+
 
 pub async fn run(shutdown: impl Future, addr: SocketAddr) {
     let (tx_rpc, rx_rpc) = mpsc::unbounded_channel();
@@ -113,7 +119,7 @@ impl Raft {
                     return Ok(());
                 },
                 State::Leader => {
-                    debug!("Running at Leader State");
+                    Leader::new(self, 750).run().await?;
                     return Ok(());
                 },
                 State::NonVoter => {
@@ -279,4 +285,30 @@ impl<'a> Candidate<'a> {
         self.raft.state == State::Candidate
     }
 
+}
+
+impl<'a> Leader<'a> {
+    pub fn new(raft:&'a mut Raft, heart_beat_rate: u64) -> Leader {
+        Leader {
+            raft: raft,
+            heart_beat_rate: Duration::from_millis(heart_beat_rate)
+        }
+    }
+
+    pub async fn run(&self) -> crate::Result<()> {
+        while self.is_leader() {
+            let next_heart_beat = Instant::now() + self.heart_beat_rate;
+            tokio::select! {
+            }
+        }
+        Ok(())
+    }
+
+    fn is_leader(&self) -> bool {
+        self.raft.state == State::Leader
+    }
+
+    pub async fn beat(&self) {
+        unimplemented!();
+    }
 }
