@@ -77,9 +77,18 @@ impl RaftRpc for RaftRpcService {
     }
 }
 
-pub async fn ask_for_vote(node: &Node, request: RequestVoteRequest) -> crate::Result<RequestVoteResponse> {
+pub async fn ask_for_vote(node: &Node, request: RequestVoteRequest) 
+    -> crate::Result<RequestVoteResponse> {
     let addr = format!("http://{}:{}", node.ip, node.port);
     let mut client = RaftRpcClient::connect(addr).await?;
     let response = client.request_vote(request).await?;
+    Ok(response.into_inner())
+}
+
+pub async fn append_entries(node: &Node, request: AppendEntriesRequest) 
+    -> crate::Result<AppendEntriesResponse> {
+    let addr = format!("http://{}:{}", node.ip, node.port);
+    let mut client = RaftRpcClient::connect(addr).await?;
+    let response = client.append_entries(request).await?;
     Ok(response.into_inner())
 }
