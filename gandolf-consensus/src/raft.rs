@@ -62,7 +62,7 @@ struct Leader <'a> {
 
 
 pub async fn run(shutdown: impl Future, config: ConfigMap) -> crate::Result<()> {
-    let addr = format!("{:?}:{:?}", config.host, config.port).parse()?;
+    let addr = format!("{}:{}", config.host, config.port).parse()?;
 
     let (tx_rpc, rx_rpc) = mpsc::unbounded_channel();
 
@@ -184,6 +184,7 @@ impl<'a> Candidate<'a> {
     }
 
     pub async fn run(&mut self) -> crate::Result<()> {
+        debug!("Running at Candidate State");
         while self.is_candidate() {
             self.raft.current_term += 1;
 
@@ -294,7 +295,9 @@ impl<'a> Leader<'a> {
         }
     }
 
+    #[instrument(level="trace", skip(self))]
     pub async fn run(&self) -> crate::Result<()> {
+        debug!("Running at Leader State");
         while self.is_leader() {
             let next_heart_beat = Instant::now() + self.raft.heartbeat;
             let next_heart_beat = sleep_until(next_heart_beat);

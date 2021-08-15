@@ -1,7 +1,6 @@
 use gandolf_consensus::{raft, ConfigMap};
 use gandolf_consensus::{DEFAULT_PORT, HEARTBEAT, TIMEOUT};
 
-
 use tracing_subscriber;
 use tokio::signal;
 
@@ -12,15 +11,15 @@ use structopt::StructOpt;
 pub async fn main() -> Result<(), gandolf_consensus::Error> {
     tracing_subscriber::fmt::try_init()?;
 
-//    let addr = "127.0.0.1:10000".parse().unwrap();
-
     let cli = Cli::from_args();
+    println!("{:?}", cli);
 
 
     let nodes = cli.nodes.ok_or("You must pass list of nodes")?;
 
     let config = ConfigMap::new(cli.host, cli.port, nodes, cli.heartbeat,
-        cli.timeout);
+        cli.timeout)?;
+
 
     raft::run(signal::ctrl_c(), config).await?;
 

@@ -67,21 +67,21 @@ impl Node {
 
 impl ConfigMap {
     pub fn new(host: String, port: u16, nodes_raw: Vec<String>, heartbeat: u64,
-        timeout: u64) -> ConfigMap {
+        timeout: u64) -> Result<ConfigMap> {
 
         let mut nodes = HashSet::new();
 
         for node_raw in nodes_raw.into_iter() {
-            let node: SocketAddr = node_raw.parse().unwrap();
+            let node: SocketAddr = node_raw.parse()?;
             nodes.insert(Node::new(None, node.ip(), node.port()));
         }
 
-        ConfigMap {
+        Ok(ConfigMap {
             host: host,
             port: port,
             nodes: nodes,
             heartbeat: heartbeat,
             timeout: timeout
-        }
+        })
     }
 }
