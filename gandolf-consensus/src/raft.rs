@@ -4,7 +4,7 @@ use std::collections::HashSet;
 use rand::{thread_rng, Rng};
 
 use tokio::time::{sleep_until, Duration, Instant};
-use tokio::sync::{mpsc};
+use tokio::sync::{mpsc, oneshot};
 
 use tonic::transport::Server;
 
@@ -163,6 +163,7 @@ impl<'a> Follower<'a> {
 
             tokio::select! {
                 _ = election_timeout => self.raft.set_state(State::Candidate),
+                Some(request)  = self.raft.rx_rpc.recv() => self.handle_api_request(request),
             }
         }
 
@@ -171,6 +172,66 @@ impl<'a> Follower<'a> {
 
     fn is_follower(&self) -> bool {
         self.raft.state == State::Follower
+    }
+
+    fn handle_api_request(&self, request: RaftMessage) {
+        match request {
+            RaftMessage::VoteMsg{body, tx} => {
+                let _ = tx.send(self.handle_vote_request(body));
+            },
+            _ => return
+        }
+    }
+
+    fn handle_vote_request(&self, body: RequestVoteRequest) -> RaftMessage {
+        if self.raft.current_term > body.term {
+            return RaftMessage::VoteResp {
+                payload: RequestVoteResponse {
+                    term: self.raft.current_term,
+                    vote_granted: false
+                },
+                status: None
+            }
+        }
+        else if (self.raft.last_log_term >= body.last_log_term)
+            && (self.raft.last_log_index >= body.last_log_index) {
+            return RaftMessage::VoteResp {
+                payload: RequestVoteResponse {
+                    term: self.raft.current_term,
+                    vote_granted: false
+                },
+                status: None
+            }
+        }
+        match self.raft.voted_for {
+            Some(candidate_id) if candidate_id.to_string() == body.candidate_id => {
+                return RaftMessage::VoteResp {
+                    payload: RequestVoteResponse {
+                        term: self.raft.current_term,
+                        vote_granted: true
+                    },
+                    status: None
+                }
+            },
+            Some(_) => {
+                return RaftMessage::VoteResp {
+                    payload: RequestVoteResponse {
+                        term: self.raft.current_term,
+                        vote_granted: false
+                    },
+                    status: None
+                }
+            },
+            None => {
+                return RaftMessage::VoteResp {
+                    payload: RequestVoteResponse {
+                        term: self.raft.current_term,
+                        vote_granted: true
+                    },
+                    status: None
+                }
+            }
+        }
     }
 
 }
