@@ -27,6 +27,9 @@ pub use db::DbGuard;
 pub mod shutdown;
 pub use shutdown::Shutdown;
 
+pub mod client;
+
+
 pub const DEFAULT_PORT: &str = "9736";
 pub const MAX_CONNECTIONS: usize = 250;
 
