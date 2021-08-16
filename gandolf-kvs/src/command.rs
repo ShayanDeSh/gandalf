@@ -83,6 +83,12 @@ impl Get {
         Ok(())
     }
 
+    pub fn into_frame(self) -> Frame {
+        let name = Frame::Bulk(Bytes::from("get".as_bytes()));
+        let key = Frame::Bulk(Bytes::from(self.key.into_bytes()));
+        Frame::Array(vec![name, key])
+    }
+
 }
 
 
@@ -113,6 +119,13 @@ impl Set {
         Ok(())
     }
 
+    pub fn into_frame(self) -> Frame {
+        let name = Frame::Bulk(Bytes::from("set".as_bytes()));
+        let key = Frame::Bulk(Bytes::from(self.key.into_bytes()));
+        let value = Frame::Bulk(Bytes::from(self.value));
+        Frame::Array(vec![name, key, value])
+    }
+
     pub fn key(&self) -> &str {
         &self.key
     }
@@ -121,4 +134,3 @@ impl Set {
         &self.value
     }
 }
-
