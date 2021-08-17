@@ -1,4 +1,4 @@
-use gandolf_consensus::{raft, ConfigMap};
+use gandolf_consensus::{server, ConfigMap};
 use gandolf_consensus::{DEFAULT_PORT, HEARTBEAT, TIMEOUT};
 
 use tracing_subscriber;
@@ -21,7 +21,7 @@ pub async fn main() -> Result<(), gandolf_consensus::Error> {
         cli.timeout)?;
 
 
-    raft::run(signal::ctrl_c(), config).await?;
+    server::run(signal::ctrl_c(), config).await?;
 
     Ok(())
 }
