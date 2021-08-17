@@ -1,22 +1,19 @@
-use std::future::Future;
 use std::collections::HashSet;
 
 use rand::{thread_rng, Rng};
 
 use tokio::time::{sleep_until, Duration, Instant};
-use tokio::sync::{mpsc, oneshot};
+use tokio::sync::mpsc;
 
-use tonic::transport::Server;
 
-use tracing::{debug, info, error};
+use tracing::{debug, error};
 use tracing::instrument;
 
 use crate::{NodeID, Node, RaftMessage, ConfigMap};
 
-use crate::rpc::{self, ask_for_vote, RaftRpcService};
+use crate::rpc::{self, ask_for_vote};
 use crate::raft_rpc::{RequestVoteRequest, RequestVoteResponse};
 use crate::raft_rpc::{AppendEntriesRequest, AppendEntriesResponse};
-use crate::raft_rpc::raft_rpc_server::{RaftRpcServer};
 
 #[derive(Debug, PartialEq, Eq)]
 pub enum State {
@@ -58,35 +55,6 @@ struct Candidate <'a> {
 #[derive(Debug)]
 struct Leader <'a> {
     raft: &'a mut Raft
-}
-
-
-pub async fn run(shutdown: impl Future, config: ConfigMap) -> crate::Result<()> {
-    let addr = format!("{}:{}", config.host, config.port).parse()?;
-
-    let (tx_rpc, rx_rpc) = mpsc::unbounded_channel();
-
-    let raft_rpc = RaftRpcService::new(tx_rpc);
-
-    let svc = RaftRpcServer::new(raft_rpc);
-
-    tokio::spawn(async move {
-            let _ = Server::builder().add_service(svc).serve(addr).await;
-        }
-    );
-
-    let mut raft = Raft::new(config, rx_rpc);
-    tokio::select! {
-        res = raft.run() => {
-            if let Err(err) = res {
-                error!(cause = %err, "Caused an error: ");
-            }
-        }
-        _ = shutdown => {
-            info!("Shutting down the server");
-        }
-    }
-    Ok(())
 }
 
 impl Raft {
