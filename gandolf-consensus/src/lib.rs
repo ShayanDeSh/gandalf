@@ -12,10 +12,18 @@ pub mod raft_rpc {
 }
 
 pub mod raft;
+pub use raft::Raft;
 
 pub mod rpc;
 
 pub mod tracker;
+pub use tracker::Tracker;
+
+pub mod parser;
+
+pub mod client;
+
+pub mod server;
 
 pub type Error = Box<dyn std::error::Error + Send + Sync>;
 
