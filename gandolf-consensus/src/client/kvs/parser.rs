@@ -3,7 +3,7 @@ use std::io::Cursor;
 
 pub use gandolf_kvs::frame::{self, Frame};
 
-use crate::parser::{Parser, ParsedData};
+use crate::parser::Parser;
 
 pub struct KvsParser;
 

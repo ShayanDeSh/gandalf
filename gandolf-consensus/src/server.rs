@@ -15,12 +15,11 @@ use crate::{Raft, ConfigMap, RaftMessage};
 use crate::rpc::RaftRpcService;
 use crate::raft_rpc::raft_rpc_server::RaftRpcServer;
 
-use crate::parser::{Parser, ParsedData};
+use crate::parser::Parser;
 
 use bytes::BytesMut;
 
 use crate::client::kvs::KvsParser;
-use crate::client::kvs::parser::Frame;
 
 use std::marker::PhantomData;
 
@@ -120,14 +119,10 @@ impl Listener {
     }
 }
 
-impl Handler<KvsParser, Frame> {
+impl<P: Parser<T>, T> Handler<P, T> {
     pub async fn run(&mut self) -> crate::Result<()> {
         loop {
             if let Some(frame) = self.parser.parse(&mut self.buffer)? {
-                match frame {
-                        Frame::Integer(a) => info!(a),
-                        _ => info!("fa")
-                }
             }
 
             if 0 == self.stream.read_buf(&mut self.buffer).await? {
