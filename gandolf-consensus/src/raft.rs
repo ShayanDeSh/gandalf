@@ -9,7 +9,7 @@ use tokio::sync::mpsc;
 use tracing::{debug, error};
 use tracing::instrument;
 
-use crate::{NodeID, Node, RaftMessage, ConfigMap};
+use crate::{NodeID, Node, RaftMessage, ConfigMap, ClientData};
 
 use crate::rpc::{self, ask_for_vote};
 use crate::raft_rpc::{RequestVoteRequest, RequestVoteResponse};
@@ -25,7 +25,7 @@ pub enum State {
 
 
 #[derive(Debug)]
-pub struct Raft<T> {
+pub struct Raft<T: ClientData> {
     id: NodeID,
     state: State,
     current_term: u64,
@@ -42,22 +42,22 @@ pub struct Raft<T> {
 }
 
 #[derive(Debug)]
-struct Follower <'a, T> {
+struct Follower <'a, T: ClientData> {
     raft: &'a mut Raft<T>
 }
 
 #[derive(Debug)]
-struct Candidate <'a, T> {
+struct Candidate <'a, T: ClientData> {
     raft: &'a mut Raft<T>,
     number_of_votes: u32
 }
 
 #[derive(Debug)]
-struct Leader <'a, T> {
+struct Leader <'a, T: ClientData> {
     raft: &'a mut Raft<T>
 }
 
-impl<T> Raft<T> {
+impl<T: ClientData> Raft<T> {
     pub fn new(config: ConfigMap, rx_rpc: mpsc::UnboundedReceiver<RaftMessage<T>>) -> Raft<T> {
         Raft {
             id: NodeID::new_v4(),
@@ -116,7 +116,7 @@ impl<T> Raft<T> {
 
 }
 
-impl<'a, T> Follower<'a, T> {
+impl<'a, T: ClientData> Follower<'a, T> {
     pub fn new(raft: &'a mut Raft<T>) -> Follower<T> {
         Follower {
             raft: raft
@@ -205,7 +205,7 @@ impl<'a, T> Follower<'a, T> {
 
 }
 
-impl<'a, T> Candidate<'a, T> {
+impl<'a, T: ClientData> Candidate<'a, T> {
     pub fn new(raft: &'a mut Raft<T>) -> Candidate<T> {
         Candidate {
             raft: raft,
@@ -318,7 +318,7 @@ impl<'a, T> Candidate<'a, T> {
 
 }
 
-impl<'a, T> Leader<'a, T> {
+impl<'a, T: ClientData> Leader<'a, T> {
     pub fn new(raft:&'a mut Raft<T>) -> Leader<T> {
         Leader {
             raft: raft

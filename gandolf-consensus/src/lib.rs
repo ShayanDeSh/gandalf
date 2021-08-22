@@ -40,7 +40,7 @@ pub struct Node {
     port: u16,
 }
 
-pub enum RaftMessage<T> {
+pub enum RaftMessage<T: ClientData> {
     VoteMsg {
         body: raft_rpc::RequestVoteRequest,
         tx: oneshot::Sender<RaftMessage<T>>

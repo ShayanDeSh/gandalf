@@ -11,11 +11,11 @@ use crate::{Node, RaftMessage, ClientData};
 use tokio::sync::{mpsc, oneshot};
 
 #[derive(Debug)]
-pub struct RaftRpcService<T> {
+pub struct RaftRpcService<T: ClientData> {
     tx_rpc: mpsc::UnboundedSender<RaftMessage<T>>
 }
 
-impl<T> RaftRpcService<T> {
+impl<T: ClientData> RaftRpcService<T> {
     pub fn new(tx_rpc: mpsc::UnboundedSender<RaftMessage<T>>) -> RaftRpcService<T> {
         RaftRpcService {
             tx_rpc: tx_rpc
