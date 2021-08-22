@@ -31,7 +31,7 @@ pub type Result<T> = std::result::Result<T, Error>;
 
 pub type NodeID = Uuid;
 
-pub trait ClientData: Send + Sync + Clone + 'static {}
+pub trait ClientData: Send + Sync + Clone + std::fmt::Debug + 'static {}
 
 #[derive(Debug, Clone, Hash, Eq, PartialEq)]
 pub struct Node {
@@ -40,6 +40,7 @@ pub struct Node {
     port: u16,
 }
 
+#[derive(Debug)]
 pub enum RaftMessage<T: ClientData> {
     VoteMsg {
         body: raft_rpc::RequestVoteRequest,
