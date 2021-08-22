@@ -38,7 +38,7 @@ pub struct Handler<P: Parser<T>, T> {
 }
 
 
-pub async fn run<T: Send + 'static, P: Parser<T> + Send + 'static + Clone>(shutdown: impl Future, config: ConfigMap, parser: P) -> crate::Result<()> {
+pub async fn run<T: Send + 'static, P: Parser<T>>(shutdown: impl Future, config: ConfigMap, parser: P) -> crate::Result<()> {
     let addr = format!("{}:{}", config.host, config.port).parse()?;
     let tcp_listener = TcpListener::bind(&format!("127.0.0.1:{}", 9999)).await?;
 
