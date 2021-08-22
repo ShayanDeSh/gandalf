@@ -8,8 +8,7 @@ use crate::parser::Parser;
 #[derive(Clone, Debug)]
 pub struct KvsParser;
 
-pub enum KvsParsedData {
-}
+impl crate::ClientData for Frame {}
 
 impl Parser<Frame> for KvsParser {
     fn parse(&self, buffer: &mut BytesMut) -> crate::Result<Option<Frame>> {

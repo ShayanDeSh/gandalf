@@ -1,12 +1,12 @@
 use tonic::{Request, Response, Status};
 
-use crate::raft_rpc::raft_rpc_server::{RaftRpc, RaftRpcServer};
+use crate::raft_rpc::raft_rpc_server::{RaftRpc};
 use crate::raft_rpc::raft_rpc_client::RaftRpcClient;
 
 use crate::raft_rpc::{AppendEntriesRequest, Entry, AppendEntriesResponse};
 use crate::raft_rpc::{RequestVoteRequest, RequestVoteResponse};
 
-use crate::{Node, RaftMessage};
+use crate::{Node, RaftMessage, ClientData};
 
 use tokio::sync::{mpsc, oneshot};
 
@@ -24,7 +24,7 @@ impl<T> RaftRpcService<T> {
 }
 
 #[tonic::async_trait]
-impl<T: 'static> RaftRpc for RaftRpcService<T> {
+impl<T: ClientData> RaftRpc for RaftRpcService<T> {
     async fn append_entries(&self,
         request: Request<AppendEntriesRequest>) ->
         Result<Response<AppendEntriesResponse>, Status> {

@@ -10,7 +10,7 @@ use tonic::transport::Server;
 
 use tracing::{info, error};
 
-use crate::{Raft, ConfigMap, RaftMessage};
+use crate::{Raft, ConfigMap, RaftMessage, ClientData};
 
 use crate::rpc::RaftRpcService;
 use crate::raft_rpc::raft_rpc_server::RaftRpcServer;
@@ -19,17 +19,15 @@ use crate::parser::Parser;
 
 use bytes::BytesMut;
 
-use crate::client::kvs::KvsParser;
-
 use std::marker::PhantomData;
 
-pub struct Listener<P: Parser<T>, T> {
+pub struct Listener<P: Parser<T>, T: ClientData> {
     listener: TcpListener,
     tx_client: mpsc::UnboundedSender<RaftMessage<T>>,
     parser: PhantomData<P>
 }
 
-pub struct Handler<P: Parser<T>, T> {
+pub struct Handler<P: Parser<T>, T: ClientData> {
     stream: BufWriter<TcpStream>,
     tx_client: mpsc::UnboundedSender<RaftMessage<T>>,
     buffer: BytesMut,
@@ -38,7 +36,7 @@ pub struct Handler<P: Parser<T>, T> {
 }
 
 
-pub async fn run<T: Send + 'static, P: Parser<T>>(shutdown: impl Future, config: ConfigMap, parser: P) -> crate::Result<()> {
+pub async fn run<T: ClientData, P: Parser<T>>(shutdown: impl Future, config: ConfigMap, parser: P) -> crate::Result<()> {
     let addr = format!("{}:{}", config.host, config.port).parse()?;
     let tcp_listener = TcpListener::bind(&format!("127.0.0.1:{}", 9999)).await?;
 
@@ -78,7 +76,7 @@ pub async fn run<T: Send + 'static, P: Parser<T>>(shutdown: impl Future, config:
     Ok(())
 }
 
-impl<P: Parser<T> + Send + 'static + Clone, T: Send + 'static> Listener<P, T> {
+impl<P: Parser<T>, T: ClientData> Listener<P, T> {
     pub async fn run(&mut self, parser: P) -> crate::Result<()> {
         loop {
             let socket = self.accept().await?;
@@ -121,7 +119,7 @@ impl<P: Parser<T> + Send + 'static + Clone, T: Send + 'static> Listener<P, T> {
     }
 }
 
-impl<P: Parser<T>, T> Handler<P, T> {
+impl<P: Parser<T>, T: ClientData> Handler<P, T> {
     pub async fn run(&mut self) -> crate::Result<()> {
         loop {
             if let Some(frame) = self.parser.parse(&mut self.buffer)? {

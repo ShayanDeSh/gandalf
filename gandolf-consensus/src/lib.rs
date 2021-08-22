@@ -31,6 +31,8 @@ pub type Result<T> = std::result::Result<T, Error>;
 
 pub type NodeID = Uuid;
 
+pub trait ClientData: Send + Sync + Clone + 'static {}
+
 #[derive(Debug, Clone, Hash, Eq, PartialEq)]
 pub struct Node {
     id: Option<NodeID>,
