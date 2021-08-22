@@ -11,12 +11,12 @@ use crate::{Node, RaftMessage};
 use tokio::sync::{mpsc, oneshot};
 
 #[derive(Debug)]
-pub struct RaftRpcService {
-    tx_rpc: mpsc::UnboundedSender<RaftMessage>
+pub struct RaftRpcService<T> {
+    tx_rpc: mpsc::UnboundedSender<RaftMessage<T>>
 }
 
-impl RaftRpcService {
-    pub fn new(tx_rpc: mpsc::UnboundedSender<RaftMessage>) -> RaftRpcService {
+impl<T> RaftRpcService<T> {
+    pub fn new(tx_rpc: mpsc::UnboundedSender<RaftMessage<T>>) -> RaftRpcService<T> {
         RaftRpcService {
             tx_rpc: tx_rpc
         }
@@ -24,7 +24,7 @@ impl RaftRpcService {
 }
 
 #[tonic::async_trait]
-impl RaftRpc for RaftRpcService {
+impl<T: 'static> RaftRpc for RaftRpcService<T> {
     async fn append_entries(&self,
         request: Request<AppendEntriesRequest>) ->
         Result<Response<AppendEntriesResponse>, Status> {

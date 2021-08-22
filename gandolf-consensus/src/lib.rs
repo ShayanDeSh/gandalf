@@ -38,10 +38,10 @@ pub struct Node {
     port: u16,
 }
 
-pub enum RaftMessage {
+pub enum RaftMessage<T> {
     VoteMsg {
         body: raft_rpc::RequestVoteRequest,
-        tx: oneshot::Sender<RaftMessage>
+        tx: oneshot::Sender<RaftMessage<T>>
     },
     VoteResp {
         payload: raft_rpc::RequestVoteResponse,
@@ -49,7 +49,7 @@ pub enum RaftMessage {
     },
     AppendMsg {
         body: raft_rpc::AppendEntriesRequest,
-        tx: oneshot::Sender<RaftMessage>
+        tx: oneshot::Sender<RaftMessage<T>>
     },
     AppendResp {
         payload: Option<raft_rpc::AppendEntriesResponse>,

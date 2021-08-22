@@ -21,7 +21,7 @@ pub async fn main() -> Result<(), gandolf_consensus::Error> {
         cli.timeout)?;
 
 
-    server::run(signal::ctrl_c(), config).await?;
+    server::run(signal::ctrl_c(), config, gandolf_consensus::client::kvs::KvsParser).await?;
 
     Ok(())
 }

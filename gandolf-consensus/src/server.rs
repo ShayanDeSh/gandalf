@@ -23,31 +23,33 @@ use crate::client::kvs::KvsParser;
 
 use std::marker::PhantomData;
 
-pub struct Listener {
+pub struct Listener<P: Parser<T>, T> {
     listener: TcpListener,
-    tx_client: mpsc::UnboundedSender<RaftMessage>,
+    tx_client: mpsc::UnboundedSender<RaftMessage<T>>,
+    parser: PhantomData<P>
 }
 
 pub struct Handler<P: Parser<T>, T> {
     stream: BufWriter<TcpStream>,
-    tx_client: mpsc::UnboundedSender<RaftMessage>,
+    tx_client: mpsc::UnboundedSender<RaftMessage<T>>,
     buffer: BytesMut,
     parser: P,
     data: PhantomData<T>
 }
 
 
-pub async fn run(shutdown: impl Future, config: ConfigMap) -> crate::Result<()> {
+pub async fn run<T: Send + 'static, P: Parser<T> + Send + 'static + Clone>(shutdown: impl Future, config: ConfigMap, parser: P) -> crate::Result<()> {
     let addr = format!("{}:{}", config.host, config.port).parse()?;
     let tcp_listener = TcpListener::bind(&format!("127.0.0.1:{}", 9999)).await?;
 
     let (tx_rpc, rx_rpc) = mpsc::unbounded_channel();
 
-    let raft_rpc = RaftRpcService::new(tx_rpc.clone());
+    let raft_rpc = RaftRpcService::<T>::new(tx_rpc.clone());
 
     let mut listener = Listener {
         listener: tcp_listener,
-        tx_client: tx_rpc.clone()
+        tx_client: tx_rpc.clone(),
+        parser: PhantomData
     };
 
     let svc = RaftRpcServer::new(raft_rpc);
@@ -58,7 +60,7 @@ pub async fn run(shutdown: impl Future, config: ConfigMap) -> crate::Result<()> 
     );
 
     tokio::spawn(async move {
-            let _ = listener.run().await;
+            let _ = listener.run(parser).await;
         }
     );
 
@@ -76,8 +78,8 @@ pub async fn run(shutdown: impl Future, config: ConfigMap) -> crate::Result<()> 
     Ok(())
 }
 
-impl Listener {
-    pub async fn run(&mut self) -> crate::Result<()> {
+impl<P: Parser<T> + Send + 'static + Clone, T: Send + 'static> Listener<P, T> {
+    pub async fn run(&mut self, parser: P) -> crate::Result<()> {
         loop {
             let socket = self.accept().await?;
 
@@ -85,7 +87,7 @@ impl Listener {
                 stream: BufWriter::new(socket),
                 buffer: BytesMut::with_capacity(4096),
                 tx_client: self.tx_client.clone(),
-                parser: KvsParser,
+                parser: parser.clone(),
                 data: PhantomData
             };
 

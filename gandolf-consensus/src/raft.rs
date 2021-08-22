@@ -25,7 +25,7 @@ pub enum State {
 
 
 #[derive(Debug)]
-pub struct Raft {
+pub struct Raft<T> {
     id: NodeID,
     state: State,
     current_term: u64,
@@ -36,29 +36,29 @@ pub struct Raft {
     voted_for: Option<NodeID>,
     current_leader: Option<NodeID>,
     nodes: HashSet<Node>,
-    rx_rpc: mpsc::UnboundedReceiver<RaftMessage>,
+    rx_rpc: mpsc::UnboundedReceiver<RaftMessage<T>>,
     election_timeout: u64,
     heartbeat: Duration
 }
 
 #[derive(Debug)]
-struct Follower <'a> {
-    raft: &'a mut Raft
+struct Follower <'a, T> {
+    raft: &'a mut Raft<T>
 }
 
 #[derive(Debug)]
-struct Candidate <'a> {
-    raft: &'a mut Raft,
+struct Candidate <'a, T> {
+    raft: &'a mut Raft<T>,
     number_of_votes: u32
 }
 
 #[derive(Debug)]
-struct Leader <'a> {
-    raft: &'a mut Raft
+struct Leader <'a, T> {
+    raft: &'a mut Raft<T>
 }
 
-impl Raft {
-    pub fn new(config: ConfigMap, rx_rpc: mpsc::UnboundedReceiver<RaftMessage>) -> Raft {
+impl<T> Raft<T> {
+    pub fn new(config: ConfigMap, rx_rpc: mpsc::UnboundedReceiver<RaftMessage<T>>) -> Raft<T> {
         Raft {
             id: NodeID::new_v4(),
             state: State::Follower,
@@ -116,10 +116,11 @@ impl Raft {
 
 }
 
-impl<'a> Follower<'a> {
-    pub fn new(raft: &'a mut Raft) -> Follower {
+impl<'a, T> Follower<'a, T> {
+    pub fn new(raft: &'a mut Raft<T>) -> Follower<T> {
         Follower {
             raft: raft
+
         }
     }
 
@@ -142,7 +143,7 @@ impl<'a> Follower<'a> {
         self.raft.state == State::Follower
     }
 
-    fn handle_api_request(&self, request: RaftMessage) {
+    fn handle_api_request(&self, request: RaftMessage<T>) {
         match request {
             RaftMessage::VoteMsg{body, tx} => {
                 let _ = tx.send(self.handle_vote_request(body));
@@ -151,7 +152,7 @@ impl<'a> Follower<'a> {
         }
     }
 
-    fn handle_vote_request(&self, body: RequestVoteRequest) -> RaftMessage {
+    fn handle_vote_request(&self, body: RequestVoteRequest) -> RaftMessage<T> {
         if self.raft.current_term > body.term {
             return RaftMessage::VoteResp {
                 payload: RequestVoteResponse {
@@ -204,8 +205,8 @@ impl<'a> Follower<'a> {
 
 }
 
-impl<'a> Candidate<'a> {
-    pub fn new(raft: &'a mut Raft) -> Candidate {
+impl<'a, T> Candidate<'a, T> {
+    pub fn new(raft: &'a mut Raft<T>) -> Candidate<T> {
         Candidate {
             raft: raft,
             number_of_votes: 0
@@ -235,7 +236,7 @@ impl<'a> Candidate<'a> {
         Ok(())
     }
 
-    fn handle_api_request(&self, request: RaftMessage) {
+    fn handle_api_request(&self, request: RaftMessage<T>) {
         match request {
             RaftMessage::VoteMsg{tx, ..} => {
                 let resp = RaftMessage::VoteResp {
@@ -317,8 +318,8 @@ impl<'a> Candidate<'a> {
 
 }
 
-impl<'a> Leader<'a> {
-    pub fn new(raft:&'a mut Raft) -> Leader {
+impl<'a, T> Leader<'a, T> {
+    pub fn new(raft:&'a mut Raft<T>) -> Leader<T> {
         Leader {
             raft: raft
         }

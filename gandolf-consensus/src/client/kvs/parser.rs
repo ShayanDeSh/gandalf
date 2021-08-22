@@ -5,6 +5,7 @@ pub use gandolf_kvs::frame::{self, Frame};
 
 use crate::parser::Parser;
 
+#[derive(Clone, Debug)]
 pub struct KvsParser;
 
 pub enum KvsParsedData {
