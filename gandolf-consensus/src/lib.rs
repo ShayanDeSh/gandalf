@@ -1,6 +1,6 @@
 use uuid::Uuid;
 use std::net::{IpAddr, SocketAddr};
-use tokio::sync::{oneshot};
+use tokio::sync::oneshot;
 use std::collections::HashSet;
 
 pub const DEFAULT_PORT: &str = "7899";
@@ -56,6 +56,14 @@ pub enum RaftMessage<T: ClientData> {
     AppendResp {
         payload: Option<raft_rpc::AppendEntriesResponse>,
         status: Option<tonic::Status>
+    },
+    ClientMsg {
+        body: T,
+        tx: oneshot::Sender<RaftMessage<T>>
+    },
+    ClientResp {
+        body: T,
+        tx: oneshot::Sender<RaftMessage<T>>
     }
 }
 
@@ -69,11 +77,7 @@ pub struct ConfigMap {
 
 impl Node {
     pub fn new(id: Option<NodeID>, ip: IpAddr, port: u16) -> Node {
-        Node {
-            id: id,
-            ip: ip,
-            port: port
-        }
+        Node { id, ip, port }
     }
 }
 
@@ -88,12 +92,6 @@ impl ConfigMap {
             nodes.insert(Node::new(None, node.ip(), node.port()));
         }
 
-        Ok(ConfigMap {
-            host: host,
-            port: port,
-            nodes: nodes,
-            heartbeat: heartbeat,
-            timeout: timeout
-        })
+        Ok(ConfigMap { host, port, nodes, heartbeat, timeout })
     }
 }

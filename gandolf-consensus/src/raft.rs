@@ -70,7 +70,7 @@ impl<T: ClientData> Raft<T> {
             voted_for: None,
             current_leader: None,
             nodes: config.nodes,
-            rx_rpc: rx_rpc,
+            rx_rpc,
             election_timeout: config.timeout,
             heartbeat: Duration::from_millis(config.heartbeat)
         }
@@ -118,10 +118,7 @@ impl<T: ClientData> Raft<T> {
 
 impl<'a, T: ClientData> Follower<'a, T> {
     pub fn new(raft: &'a mut Raft<T>) -> Follower<T> {
-        Follower {
-            raft: raft
-
-        }
+        Follower { raft }
     }
 
     #[instrument(level="trace", skip(self))]
@@ -208,7 +205,7 @@ impl<'a, T: ClientData> Follower<'a, T> {
 impl<'a, T: ClientData> Candidate<'a, T> {
     pub fn new(raft: &'a mut Raft<T>) -> Candidate<T> {
         Candidate {
-            raft: raft,
+            raft,
             number_of_votes: 0
         }
     }
@@ -320,9 +317,7 @@ impl<'a, T: ClientData> Candidate<'a, T> {
 
 impl<'a, T: ClientData> Leader<'a, T> {
     pub fn new(raft:&'a mut Raft<T>) -> Leader<T> {
-        Leader {
-            raft: raft
-        }
+        Leader { raft }
     }
 
     #[instrument(level="trace", skip(self))]

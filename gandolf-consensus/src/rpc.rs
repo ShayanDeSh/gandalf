@@ -1,6 +1,6 @@
 use tonic::{Request, Response, Status};
 
-use crate::raft_rpc::raft_rpc_server::{RaftRpc};
+use crate::raft_rpc::raft_rpc_server::RaftRpc;
 use crate::raft_rpc::raft_rpc_client::RaftRpcClient;
 
 use crate::raft_rpc::{AppendEntriesRequest, Entry, AppendEntriesResponse};
@@ -17,9 +17,7 @@ pub struct RaftRpcService<T: ClientData> {
 
 impl<T: ClientData> RaftRpcService<T> {
     pub fn new(tx_rpc: mpsc::UnboundedSender<RaftMessage<T>>) -> RaftRpcService<T> {
-        RaftRpcService {
-            tx_rpc: tx_rpc
-        }
+        RaftRpcService { tx_rpc }
     }
 }
 
@@ -31,7 +29,7 @@ impl<T: ClientData> RaftRpc for RaftRpcService<T> {
         let (tx, rx) = oneshot::channel();
         let resp = self.tx_rpc.send(RaftMessage::AppendMsg{
             body: request.into_inner(),
-            tx: tx
+            tx
         });
         if let Err(err) = resp {
             return Err(Status::internal(err.to_string()));
@@ -56,7 +54,7 @@ impl<T: ClientData> RaftRpc for RaftRpcService<T> {
         let (tx, rx) = oneshot::channel();
         let resp = self.tx_rpc.send(RaftMessage::VoteMsg{
             body: request.into_inner(),
-            tx: tx
+            tx
         });
         if let Err(err) = resp {
             return Err(Status::internal(err.to_string()));
