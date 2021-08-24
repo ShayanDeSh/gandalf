@@ -1,22 +1,25 @@
-type Index = u64;
-type Term  = u64;
+use bytes::Bytes;
 
+pub type Index = usize;
+pub type Term  = usize;
+
+#[tonic::async_trait]
 pub trait Tracker {
     type Entity;
 
-    fn get_last_log_index() -> Index;
+    fn get_last_log_index(&self) -> Index;
 
-    fn get_last_log_term() -> Term;
+    fn get_last_log_term(&self) -> Term;
 
-    fn get_last_commited_index() -> Index;
+    fn get_last_commited_index(&self) -> Index;
 
-    fn get_log_entity(index: Index) -> Self::Entity;
+    fn get_log_entity(&self, index: Index) -> &Self::Entity;
 
-    fn get_log_term(index: Index) -> Term;
+    fn get_log_term(&self, index: Index) -> Term;
 
-    fn append_log(entity: Self::Entity, term: u64) -> crate::Result<Index>;
+    fn append_log(&mut self, entity: Self::Entity, term: Term) -> crate::Result<Index>;
 
-    fn delete_last_log() -> crate::Result<()>;
+    fn delete_last_log(&mut self) -> crate::Result<()>;
 
-    fn commit() -> crate::Result<()>;
+    async fn commit(&mut self, index: Index) -> crate::Result<Option<Bytes>>;
 }
