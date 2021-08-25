@@ -321,7 +321,7 @@ impl<'a, T: ClientData> Leader<'a, T> {
     }
 
     #[instrument(level="trace", skip(self))]
-    pub async fn run(&self) -> crate::Result<()> {
+    pub async fn run(&mut self) -> crate::Result<()> {
         debug!("Running at Leader State");
         while self.is_leader() {
             let next_heart_beat = Instant::now() + self.raft.heartbeat;
@@ -330,11 +330,21 @@ impl<'a, T: ClientData> Leader<'a, T> {
             tokio::select! {
                 _ = next_heart_beat => {
                     self.beat().await?;
-                }
+                },
+                Some(request) = self.raft.rx_rpc.recv() => self.handle_api_request(request),
             }
         }
         Ok(())
     }
+
+    fn handle_api_request(&mut self, request: RaftMessage<T>) {
+       match request {
+           RaftMessage::ClientMsg{body, tx} => {
+           },
+           _ => unreachable!()
+       }
+    }
+
 
     fn is_leader(&self) -> bool {
         self.raft.state == State::Leader

@@ -63,8 +63,7 @@ pub enum RaftMessage<T: ClientData> {
         tx: oneshot::Sender<RaftMessage<T>>
     },
     ClientResp {
-        body: T,
-        tx: oneshot::Sender<RaftMessage<T>>
+        body: T
     }
 }
 

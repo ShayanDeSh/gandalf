@@ -4,7 +4,7 @@ use tokio::time::{self, Duration};
 
 use std::future::Future;
 
-use tokio::sync::mpsc;
+use tokio::sync::{mpsc, oneshot};
 
 use tonic::transport::Server;
 
@@ -124,6 +124,21 @@ impl<P: Parser<T>, T: ClientData> Handler<P, T> {
     pub async fn run(&mut self) -> crate::Result<()> {
         loop {
             if let Some(frame) = self.parser.parse(&mut self.buffer)? {
+                let (tx, rx) = oneshot::channel();
+                let msg = RaftMessage::ClientMsg {
+                    body: frame,
+                    tx
+                };
+                self.tx_client.send(msg)?;
+
+                let resp = rx.await?;
+
+                match resp {
+                    RaftMessage::ClientResp{body} =>  {
+                        info!("{:?}", body);
+                    },
+                    _ => {return Err("Unkown response recived".into());}
+                }
             }
 
             if 0 == self.stream.read_buf(&mut self.buffer).await? {
