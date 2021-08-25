@@ -10,7 +10,7 @@ use tonic::transport::Server;
 
 use tracing::{info, error};
 
-use crate::{Raft, ConfigMap, RaftMessage, ClientData};
+use crate::{Raft, ConfigMap, RaftMessage, ClientData, Tracker};
 
 use crate::rpc::RaftRpcService;
 use crate::raft_rpc::raft_rpc_server::RaftRpcServer;
@@ -36,8 +36,8 @@ pub struct Handler<P: Parser<T>, T: ClientData> {
 }
 
 
-pub async fn run<T: ClientData, P: Parser<T>>(shutdown: impl Future,
-    config: ConfigMap, parser: P) -> crate::Result<()> {
+pub async fn run<T: ClientData, P: Parser<T>, R: Tracker>(shutdown: impl Future,
+    config: ConfigMap, parser: P, tracker: R) -> crate::Result<()> {
     let addr = format!("{}:{}", config.host, config.port).parse()?;
     let tcp_listener = TcpListener::bind(&format!("127.0.0.1:{}", 9999)).await?;
 
@@ -63,7 +63,7 @@ pub async fn run<T: ClientData, P: Parser<T>>(shutdown: impl Future,
         }
     );
 
-    let mut raft = Raft::new(config, rx_rpc);
+    let mut raft = Raft::new(config, rx_rpc, tracker);
     tokio::select! {
         res = raft.run() => {
             if let Err(err) = res {

@@ -6,6 +6,8 @@ use tokio::signal;
 
 use structopt::StructOpt;
 
+use gandolf_consensus::client::kvs::{KvsParser, KvsTracker}; 
+
 
 #[tokio::main]
 pub async fn main() -> Result<(), gandolf_consensus::Error> {
@@ -20,8 +22,11 @@ pub async fn main() -> Result<(), gandolf_consensus::Error> {
     let config = ConfigMap::new(cli.host, cli.port, nodes, cli.heartbeat,
         cli.timeout)?;
 
+    let address = "127.0.0.1:9736".parse()?;
 
-    server::run(signal::ctrl_c(), config, gandolf_consensus::client::kvs::KvsParser).await?;
+    let tracker = KvsTracker::new(address);
+
+    server::run(signal::ctrl_c(), config, KvsParser, tracker).await?;
 
     Ok(())
 }

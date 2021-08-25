@@ -9,7 +9,7 @@ use tokio::sync::mpsc;
 use tracing::{debug, error};
 use tracing::instrument;
 
-use crate::{NodeID, Node, RaftMessage, ConfigMap, ClientData};
+use crate::{NodeID, Node, RaftMessage, ConfigMap, ClientData, Tracker};
 
 use crate::rpc::{self, ask_for_vote};
 use crate::raft_rpc::{RequestVoteRequest, RequestVoteResponse};
@@ -25,7 +25,7 @@ pub enum State {
 
 
 #[derive(Debug)]
-pub struct Raft<T: ClientData> {
+pub struct Raft<T: ClientData, R: Tracker> {
     id: NodeID,
     state: State,
     current_term: u64,
@@ -38,27 +38,28 @@ pub struct Raft<T: ClientData> {
     nodes: HashSet<Node>,
     rx_rpc: mpsc::UnboundedReceiver<RaftMessage<T>>,
     election_timeout: u64,
-    heartbeat: Duration
+    heartbeat: Duration,
+    tracker: R
 }
 
 #[derive(Debug)]
-struct Follower <'a, T: ClientData> {
-    raft: &'a mut Raft<T>
+struct Follower <'a, T: ClientData, R: Tracker> {
+    raft: &'a mut Raft<T, R>
 }
 
 #[derive(Debug)]
-struct Candidate <'a, T: ClientData> {
-    raft: &'a mut Raft<T>,
+struct Candidate <'a, T: ClientData, R: Tracker> {
+    raft: &'a mut Raft<T, R>,
     number_of_votes: u32
 }
 
 #[derive(Debug)]
-struct Leader <'a, T: ClientData> {
-    raft: &'a mut Raft<T>
+struct Leader <'a, T: ClientData, R: Tracker> {
+    raft: &'a mut Raft<T, R>
 }
 
-impl<T: ClientData> Raft<T> {
-    pub fn new(config: ConfigMap, rx_rpc: mpsc::UnboundedReceiver<RaftMessage<T>>) -> Raft<T> {
+impl<T: ClientData, R: Tracker> Raft<T, R> {
+    pub fn new(config: ConfigMap, rx_rpc: mpsc::UnboundedReceiver<RaftMessage<T>>, tracker: R) -> Raft<T, R> {
         Raft {
             id: NodeID::new_v4(),
             state: State::Follower,
@@ -72,7 +73,8 @@ impl<T: ClientData> Raft<T> {
             nodes: config.nodes,
             rx_rpc,
             election_timeout: config.timeout,
-            heartbeat: Duration::from_millis(config.heartbeat)
+            heartbeat: Duration::from_millis(config.heartbeat),
+            tracker
         }
     }
 
@@ -116,8 +118,8 @@ impl<T: ClientData> Raft<T> {
 
 }
 
-impl<'a, T: ClientData> Follower<'a, T> {
-    pub fn new(raft: &'a mut Raft<T>) -> Follower<T> {
+impl<'a, T: ClientData, R: Tracker> Follower<'a, T, R> {
+    pub fn new(raft: &'a mut Raft<T, R>) -> Follower<T, R> {
         Follower { raft }
     }
 
@@ -202,8 +204,8 @@ impl<'a, T: ClientData> Follower<'a, T> {
 
 }
 
-impl<'a, T: ClientData> Candidate<'a, T> {
-    pub fn new(raft: &'a mut Raft<T>) -> Candidate<T> {
+impl<'a, T: ClientData, R: Tracker> Candidate<'a, T, R> {
+    pub fn new(raft: &'a mut Raft<T, R>) -> Candidate<T, R> {
         Candidate {
             raft,
             number_of_votes: 0
@@ -315,8 +317,8 @@ impl<'a, T: ClientData> Candidate<'a, T> {
 
 }
 
-impl<'a, T: ClientData> Leader<'a, T> {
-    pub fn new(raft:&'a mut Raft<T>) -> Leader<T> {
+impl<'a, T: ClientData, R: Tracker> Leader<'a, T, R> {
+    pub fn new(raft:&'a mut Raft<T, R>) -> Leader<T, R> {
         Leader { raft }
     }
 

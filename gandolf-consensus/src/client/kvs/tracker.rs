@@ -10,7 +10,7 @@ use std::net::SocketAddr;
 
 pub struct Cell(Term, Frame);
 
-pub struct KVSTracker {
+pub struct KvsTracker {
     log: Vec<Cell>,
     last_log_index: Index,
     last_log_term: Term,
@@ -18,20 +18,20 @@ pub struct KVSTracker {
     addr: SocketAddr
 }
 
-async fn read_response(connection: &mut Connection) -> crate::Result<Frame> {
-    let response = connection.read().await?;
-
-    match response {
-        Some(Frame::Error(msg)) => Err(msg.into()),
-        Some(frame) => Ok(frame),
-        None => {
-            return Err("Connection closed by the peer".into());
+impl KvsTracker {
+    pub fn new(addr: SocketAddr) -> KvsTracker {
+        KvsTracker {
+            log: Vec::new(),
+            last_log_index: 0,
+            last_log_term: 0,
+            last_commited_index: 0,
+            addr
         }
     }
 }
 
 #[tonic::async_trait]
-impl Tracker for KVSTracker {
+impl Tracker for KvsTracker {
     type Entity = Frame;
 
     fn get_last_log_index(&self) -> Index {
@@ -82,6 +82,18 @@ impl Tracker for KVSTracker {
             Frame::Bulk(value) => Ok(Some(value)),
             Frame::Null => Ok(None),
             frame => Err(format!("{:?}", frame).into()),
+        }
+    }
+}
+
+async fn read_response(connection: &mut Connection) -> crate::Result<Frame> {
+    let response = connection.read().await?;
+
+    match response {
+        Some(Frame::Error(msg)) => Err(msg.into()),
+        Some(frame) => Ok(frame),
+        None => {
+            return Err("Connection closed by the peer".into());
         }
     }
 }
