@@ -1,9 +1,10 @@
 use bytes::{Buf, BytesMut};
 use std::io::Cursor;
 
-pub use gandolf_kvs::frame::{self, Frame};
+use gandolf_kvs::frame::{self, Frame};
+use gandolf_kvs::Command;
 
-use crate::parser::Parser;
+use crate::parser::{Parser, Kind};
 
 #[derive(Clone, Debug)]
 pub struct KvsParser;
@@ -11,7 +12,7 @@ pub struct KvsParser;
 impl crate::ClientData for Frame {}
 
 impl Parser<Frame> for KvsParser {
-    fn parse(&self, buffer: &mut BytesMut) -> crate::Result<Option<Frame>> {
+    fn parse(&self, buffer: &mut BytesMut) -> crate::Result<Option<Kind<Frame>>> {
         let mut cursor = Cursor::new(&buffer[..]);
         match Frame::check(&mut cursor) {
             Ok(_) => {
@@ -22,7 +23,11 @@ impl Parser<Frame> for KvsParser {
                 
                 buffer.advance(len);
 
-                Ok(Some(frame))
+                match Command::from_frame(frame.clone())? {
+                    Command::Get(_) => return Ok(Some(Kind::Read(frame))),
+                    Command::Set(_) => return Ok(Some(Kind::Write(frame)))
+                }
+
             }
 
             Err(frame::Error::Incomplete) => Ok(None),
