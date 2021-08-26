@@ -1,7 +1,7 @@
 use bytes::Bytes;
 
-pub type Index = usize;
-pub type Term  = usize;
+pub type Index = u64;
+pub type Term  = u64;
 
 #[tonic::async_trait]
 pub trait Tracker {
