@@ -34,6 +34,16 @@ impl KvsTracker {
 impl Tracker for KvsTracker {
     type Entity = Frame;
 
+    async fn propagate(&self, entity: &Self::Entity) -> crate::Result<Self::Entity> {
+        let socket = TcpStream::connect(self.addr).await?;
+        let mut connection = Connection::new(socket);
+        connection.write_frame(entity).await?;
+
+        let response = read_response(&mut connection).await?;
+
+        Ok(response)
+    }
+
     fn get_last_log_index(&self) -> Index {
         self.last_log_index
     }
@@ -70,17 +80,22 @@ impl Tracker for KvsTracker {
         Ok(())
     }
 
-    async fn commit(&mut self, index: Index) -> crate::Result<Option<Bytes>> {
-        let socket = TcpStream::connect(self.addr).await?;
-        let mut connection = Connection::new(socket);
-        connection.write_frame(&self.log[index].1).await?;
+    async fn commit(&mut self, index: Index) -> crate::Result<Self::Entity> {
+        if index != self.last_commited_index + 1 {
+            return Err("Wrong commit index".into());
+        }
 
-        let response = read_response(&mut connection).await?;
+        let response = self.propagate(&self.log[index].1).await?;
 
         match response {
-            Frame::Simple(value) => Ok(Some(value.into())),
-            Frame::Bulk(value) => Ok(Some(value)),
-            Frame::Null => Ok(None),
+            Frame::Simple(_) => {
+                self.last_commited_index += 1;
+                Ok(response)
+            },
+            Frame::Bulk(_) =>{
+                self.last_commited_index += 1;
+                Ok(response)
+            },
             frame => Err(format!("{:?}", frame).into()),
         }
     }

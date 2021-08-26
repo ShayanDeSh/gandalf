@@ -6,6 +6,8 @@ pub type Term  = usize;
 #[tonic::async_trait]
 pub trait Tracker {
     type Entity;
+    
+    async fn propagate(&self, entity: &Self::Entity) -> crate::Result<Self::Entity>;
 
     fn get_last_log_index(&self) -> Index;
 
@@ -21,5 +23,5 @@ pub trait Tracker {
 
     fn delete_last_log(&mut self) -> crate::Result<()>;
 
-    async fn commit(&mut self, index: Index) -> crate::Result<Option<Bytes>>;
+    async fn commit(&mut self, index: Index) -> crate::Result<Self::Entity>;
 }
