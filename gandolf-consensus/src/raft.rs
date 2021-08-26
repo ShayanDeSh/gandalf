@@ -339,7 +339,7 @@ impl<'a, T: ClientData, R: Tracker<Entity=T>> Leader<'a, T, R> {
         Ok(())
     }
 
-    async fn handle_api_request(&mut self, request: RaftMessage<T>) -> crate::Result<()>{
+    async fn handle_api_request(&mut self, request: RaftMessage<T>) -> crate::Result<()> {
        match request {
            RaftMessage::ClientReadMsg{body, tx} => {
                let response = self.raft.tracker.propagate(&body).await?;
@@ -348,7 +348,9 @@ impl<'a, T: ClientData, R: Tracker<Entity=T>> Leader<'a, T, R> {
                }
            },
            RaftMessage::ClientWriteMsg {body, tx} => {
-               self.raft.tracker.append_log(body, self.raft.last_log_term as usize);
+               let index = self.raft.tracker.append_log(body, self.raft.last_log_term)?;
+               self.raft.last_log_index = index;
+               
            },
            _ => unreachable!()
        }
@@ -362,14 +364,11 @@ impl<'a, T: ClientData, R: Tracker<Entity=T>> Leader<'a, T, R> {
     pub async fn beat(&self) -> crate::Result<()> {
         let nodes = self.raft.get_all_nodes().into_iter();
         for node in nodes {
-            // TODO:
-            // Must get prev_log_term and prev_log_term form tracker
-            // Just left it 0 for now
             let request = AppendEntriesRequest {
                 term: self.raft.current_term,
                 leader_id: self.raft.id.to_string(),
-                prev_log_index: 0,
-                prev_log_term: 0,
+                prev_log_index: self.raft.tracker.get_last_log_index(),
+                prev_log_term: self.raft.tracker.get_last_log_term(),
                 entries: vec![]
             };
             tokio::spawn(async move {
