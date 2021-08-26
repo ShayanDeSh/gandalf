@@ -25,7 +25,7 @@ pub enum State {
 
 
 #[derive(Debug)]
-pub struct Raft<T: ClientData, R: Tracker> {
+pub struct Raft<T: ClientData, R: Tracker<Entity=T>> {
     id: NodeID,
     state: State,
     current_term: u64,
@@ -43,22 +43,22 @@ pub struct Raft<T: ClientData, R: Tracker> {
 }
 
 #[derive(Debug)]
-struct Follower <'a, T: ClientData, R: Tracker> {
+struct Follower <'a, T: ClientData, R: Tracker<Entity=T>> {
     raft: &'a mut Raft<T, R>
 }
 
 #[derive(Debug)]
-struct Candidate <'a, T: ClientData, R: Tracker> {
+struct Candidate <'a, T: ClientData, R: Tracker<Entity=T>> {
     raft: &'a mut Raft<T, R>,
     number_of_votes: u32
 }
 
 #[derive(Debug)]
-struct Leader <'a, T: ClientData, R: Tracker> {
+struct Leader <'a, T: ClientData, R: Tracker<Entity=T>> {
     raft: &'a mut Raft<T, R>
 }
 
-impl<T: ClientData, R: Tracker> Raft<T, R> {
+impl<T: ClientData, R: Tracker<Entity=T>> Raft<T, R> {
     pub fn new(config: ConfigMap, rx_rpc: mpsc::UnboundedReceiver<RaftMessage<T>>, tracker: R) -> Raft<T, R> {
         Raft {
             id: NodeID::new_v4(),
@@ -118,7 +118,7 @@ impl<T: ClientData, R: Tracker> Raft<T, R> {
 
 }
 
-impl<'a, T: ClientData, R: Tracker> Follower<'a, T, R> {
+impl<'a, T: ClientData, R: Tracker<Entity=T>> Follower<'a, T, R> {
     pub fn new(raft: &'a mut Raft<T, R>) -> Follower<T, R> {
         Follower { raft }
     }
@@ -204,7 +204,7 @@ impl<'a, T: ClientData, R: Tracker> Follower<'a, T, R> {
 
 }
 
-impl<'a, T: ClientData, R: Tracker> Candidate<'a, T, R> {
+impl<'a, T: ClientData, R: Tracker<Entity=T>> Candidate<'a, T, R> {
     pub fn new(raft: &'a mut Raft<T, R>) -> Candidate<T, R> {
         Candidate {
             raft,
@@ -317,7 +317,7 @@ impl<'a, T: ClientData, R: Tracker> Candidate<'a, T, R> {
 
 }
 
-impl<'a, T: ClientData, R: Tracker> Leader<'a, T, R> {
+impl<'a, T: ClientData, R: Tracker<Entity=T>> Leader<'a, T, R> {
     pub fn new(raft:&'a mut Raft<T, R>) -> Leader<T, R> {
         Leader { raft }
     }
@@ -333,20 +333,27 @@ impl<'a, T: ClientData, R: Tracker> Leader<'a, T, R> {
                 _ = next_heart_beat => {
                     self.beat().await?;
                 },
-                Some(request) = self.raft.rx_rpc.recv() => self.handle_api_request(request),
+                Some(request) = self.raft.rx_rpc.recv() => self.handle_api_request(request).await?,
             }
         }
         Ok(())
     }
 
-    fn handle_api_request(&mut self, request: RaftMessage<T>) {
+    async fn handle_api_request(&mut self, request: RaftMessage<T>) -> crate::Result<()>{
        match request {
-           RaftMessage::ClientMsg{body, tx} => {
+           RaftMessage::ClientReadMsg{body, tx} => {
+               let response = self.raft.tracker.propagate(&body).await?;
+               if let Err(_) = tx.send(RaftMessage::ClientResp { body: response }) {
+                   error!("Peer drop the client response");
+               }
+           },
+           RaftMessage::ClientWriteMsg {body, tx} => {
+               self.raft.tracker.append_log(body, self.raft.last_log_term as usize);
            },
            _ => unreachable!()
        }
+       Ok(())
     }
-
 
     fn is_leader(&self) -> bool {
         self.raft.state == State::Leader
