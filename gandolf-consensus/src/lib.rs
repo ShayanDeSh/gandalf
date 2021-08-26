@@ -58,7 +58,11 @@ pub enum RaftMessage<T: ClientData> {
         payload: Option<raft_rpc::AppendEntriesResponse>,
         status: Option<tonic::Status>
     },
-    ClientMsg {
+    ClientReadMsg {
+        body: T,
+        tx: oneshot::Sender<RaftMessage<T>>
+    },
+    ClientWriteMsg {
         body: T,
         tx: oneshot::Sender<RaftMessage<T>>
     },
