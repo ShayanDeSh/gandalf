@@ -1,7 +1,5 @@
 use gandolf_kvs::{Frame, Connection};
 
-use bytes::Bytes;
-
 use crate::Tracker;
 use crate::tracker::{Index, Term};
 
@@ -57,11 +55,11 @@ impl Tracker for KvsTracker {
     } 
 
     fn get_log_entity(&self, index: Index) -> &Self::Entity {
-        &self.log[index].1
+        &self.log[index as usize].1
     }
 
     fn get_log_term(&self, index: Index) -> Term {
-        self.log[index].0
+        self.log[index as usize].0
     }
 
     fn append_log(&mut self, entity: Self::Entity, term: Term) -> crate::Result<Index> {
@@ -85,7 +83,7 @@ impl Tracker for KvsTracker {
             return Err("Wrong commit index".into());
         }
 
-        let response = self.propagate(&self.log[index].1).await?;
+        let response = self.propagate(&self.log[index as usize].1).await?;
 
         match response {
             Frame::Simple(_) => {
