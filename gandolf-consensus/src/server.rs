@@ -15,7 +15,7 @@ use crate::{Raft, ConfigMap, RaftMessage, ClientData, Tracker};
 use crate::rpc::RaftRpcService;
 use crate::raft_rpc::raft_rpc_server::RaftRpcServer;
 
-use crate::parser::Parser;
+use crate::parser::{Parser, Kind};
 
 use bytes::BytesMut;
 
@@ -36,7 +36,7 @@ pub struct Handler<P: Parser<T>, T: ClientData> {
 }
 
 
-pub async fn run<T: ClientData, P: Parser<T>, R: Tracker>(shutdown: impl Future,
+pub async fn run<T: ClientData, P: Parser<T>, R: Tracker<Entity=T>>(shutdown: impl Future,
     config: ConfigMap, parser: P, tracker: R) -> crate::Result<()> {
     let addr = format!("{}:{}", config.host, config.port).parse()?;
     let tcp_listener = TcpListener::bind(&format!("127.0.0.1:{}", 9999)).await?;
@@ -125,9 +125,9 @@ impl<P: Parser<T>, T: ClientData> Handler<P, T> {
         loop {
             if let Some(frame) = self.parser.parse(&mut self.buffer)? {
                 let (tx, rx) = oneshot::channel();
-                let msg = RaftMessage::ClientMsg {
-                    body: frame,
-                    tx
+                let msg = match frame {
+                    Kind::Read(frame) => RaftMessage::ClientReadMsg { body: frame, tx },
+                    Kind::Write(frame) => RaftMessage::ClientWriteMsg { body: frame, tx }
                 };
                 self.tx_client.send(msg)?;
 
