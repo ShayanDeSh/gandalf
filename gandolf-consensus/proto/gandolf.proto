@@ -19,7 +19,7 @@ message AppendEntriesRequest {
 }
 
 message Entry {
-    map<string, string> payload = 1;
+    string payload = 1;
 }
 
 message AppendEntriesResponse {
