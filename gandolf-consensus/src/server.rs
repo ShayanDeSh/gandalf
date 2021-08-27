@@ -21,6 +21,8 @@ use bytes::BytesMut;
 
 use std::marker::PhantomData;
 
+use std::sync::{Arc, RwLock};
+
 pub struct Listener<P: Parser<T>, T: ClientData> {
     listener: TcpListener,
     tx_client: mpsc::UnboundedSender<RaftMessage<T>>,
@@ -63,7 +65,7 @@ pub async fn run<T: ClientData, P: Parser<T>, R: Tracker<Entity=T>>(shutdown: im
         }
     );
 
-    let mut raft = Raft::new(config, rx_rpc, tracker);
+    let mut raft = Raft::new(config, rx_rpc, Arc::new(RwLock::new(tracker)));
     tokio::select! {
         res = raft.run() => {
             if let Err(err) = res {

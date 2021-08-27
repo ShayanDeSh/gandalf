@@ -1,10 +1,10 @@
 use std::collections::HashSet;
+use std::sync::{Arc, RwLock};
 
 use rand::{thread_rng, Rng};
 
 use tokio::time::{Duration, Instant};
 use tokio::sync::mpsc;
-
 
 use tracing::debug;
 
@@ -36,14 +36,15 @@ pub struct Raft<T: ClientData, R: Tracker<Entity=T>> {
     pub rx_rpc: mpsc::UnboundedReceiver<RaftMessage<T>>,
     pub election_timeout: u64,
     pub heartbeat: Duration,
-    pub tracker: R
+    pub tracker: Arc<RwLock<R>>
 }
 
 
 
 
 impl<T: ClientData, R: Tracker<Entity=T>> Raft<T, R> {
-    pub fn new(config: ConfigMap, rx_rpc: mpsc::UnboundedReceiver<RaftMessage<T>>, tracker: R) -> Raft<T, R> {
+    pub fn new(config: ConfigMap, rx_rpc: mpsc::UnboundedReceiver<RaftMessage<T>>,
+        tracker: Arc<RwLock<R>>) -> Raft<T, R> {
         Raft {
             id: NodeID::new_v4(),
             state: State::Follower,
