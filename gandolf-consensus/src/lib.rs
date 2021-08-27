@@ -2,6 +2,7 @@ use uuid::Uuid;
 use std::net::{IpAddr, SocketAddr};
 use tokio::sync::oneshot;
 use std::collections::HashSet;
+use serde::{de::DeserializeOwned, Serialize};
 
 pub const DEFAULT_PORT: &str = "7899";
 pub const HEARTBEAT: &str = "500";
@@ -33,7 +34,7 @@ pub type Result<T> = std::result::Result<T, Error>;
 
 pub type NodeID = Uuid;
 
-pub trait ClientData: Send + Sync + Clone + std::fmt::Debug + 'static {}
+pub trait ClientData: Send + Sync + Clone + Serialize + DeserializeOwned + std::fmt::Debug + 'static {}
 
 #[derive(Debug, Clone, Hash, Eq, PartialEq)]
 pub struct Node {
