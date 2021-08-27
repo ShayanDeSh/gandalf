@@ -11,6 +11,9 @@ use atoi::atoi;
 
 use tracing::{debug, error, info, instrument};
 
+use serde::{de, de::Visitor, Serialize, Deserialize, Deserializer};
+use serde::ser::{SerializeSeq};
+
 #[derive(Debug)]
 pub enum Error {
     Incomplete,
@@ -18,7 +21,7 @@ pub enum Error {
 }
 
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub enum Frame {
     Integer(u64),
     Simple(String),
@@ -160,6 +163,7 @@ fn get_line<'a>(cursor: &'a mut Cursor<&[u8]>) -> Result<&'a [u8], Error> {
 
     Err(Error::Incomplete)
 }
+
 
 impl From<String> for Error {
     fn from(src: String) -> Error {
