@@ -4,7 +4,7 @@ pub type Index = u64;
 pub type Term  = u64;
 
 #[tonic::async_trait]
-pub trait Tracker {
+pub trait Tracker: Sync + Send + 'static {
     type Entity;
     
     async fn propagate(&self, entity: &Self::Entity) -> crate::Result<Self::Entity>;

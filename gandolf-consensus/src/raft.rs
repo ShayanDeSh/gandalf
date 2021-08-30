@@ -1,10 +1,10 @@
 use std::collections::HashSet;
-use std::sync::{Arc, RwLock};
+use std::sync::{Arc};
 
 use rand::{thread_rng, Rng};
 
 use tokio::time::{Duration, Instant};
-use tokio::sync::mpsc;
+use tokio::sync::{mpsc, RwLock};
 
 use tracing::debug;
 

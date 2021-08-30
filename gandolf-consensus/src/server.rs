@@ -4,7 +4,7 @@ use tokio::time::{self, Duration};
 
 use std::future::Future;
 
-use tokio::sync::{mpsc, oneshot};
+use tokio::sync::{mpsc, oneshot, RwLock};
 
 use tonic::transport::Server;
 
@@ -21,7 +21,7 @@ use bytes::BytesMut;
 
 use std::marker::PhantomData;
 
-use std::sync::{Arc, RwLock};
+use std::sync::{Arc};
 
 pub struct Listener<P: Parser<T>, T: ClientData> {
     listener: TcpListener,
