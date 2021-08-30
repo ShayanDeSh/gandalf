@@ -1,12 +1,12 @@
 use crate::{Raft, ClientData, Tracker, RaftMessage, Node, NodeID};
 use crate::raft::State;
 use tracing::{instrument, error, debug};
-use tokio::time::{Instant, sleep_until};
+use tokio::time::{Instant, sleep_until, Duration};
 use tokio::sync::{mpsc, RwLock};
-use crate::raft_rpc::{AppendEntriesRequest, Entry};
+use crate::raft_rpc::{AppendEntriesRequest, Entry, AppendEntriesResponse};
 use crate::rpc;
 
-use std::sync::{Arc};
+use std::sync::Arc;
 
 #[derive(Debug)]
 pub struct Leader <'a, T: ClientData, R: Tracker<Entity=T>> {
@@ -18,16 +18,23 @@ pub struct Leader <'a, T: ClientData, R: Tracker<Entity=T>> {
 impl<'a, T: ClientData, R: Tracker<Entity=T>> Leader<'a, T, R> {
     pub fn new(raft:&'a mut Raft<T, R>) -> Leader<T, R> {
         let mut replicators = Vec::new();
+
         let (tx_repl, rx_core_repl) = mpsc::unbounded_channel();
+
         for node in raft.get_all_nodes().into_iter() {
             let (tx_core_repl, rx_repl) = mpsc::unbounded_channel();
+
             let mut replicator = Replicator::new(node, raft.last_log_index + 1,
-                raft.current_term, raft.tracker.clone(), raft.id.clone(), rx_repl, tx_repl.clone());
+                raft.current_term, raft.tracker.clone(), raft.id.clone(),
+                rx_repl, tx_repl.clone(), raft.heartbeat);
+
             tokio::spawn(async move {
                 replicator.run().await;
             });
+
             replicators.push(tx_core_repl);
         }
+
         Leader { raft , replicators, rx_repl: rx_core_repl }
     }
 
@@ -36,7 +43,8 @@ impl<'a, T: ClientData, R: Tracker<Entity=T>> Leader<'a, T, R> {
         debug!("Running at Leader State");
         while self.is_leader() {
             tokio::select! {
-                Some(request) = self.raft.rx_rpc.recv() => self.handle_api_request(request).await?,
+                Some(request) = self.raft.rx_rpc.recv() => 
+                    self.handle_api_request(request).await?,
             }
         }
         Ok(())
@@ -98,13 +106,14 @@ struct Replicator <T: ClientData, R: Tracker<Entity=T>> {
     id: NodeID,
     state: ReplicationState,
     rx_repl: mpsc::UnboundedReceiver<ReplicatorMsg>,
-    tx_repl: mpsc::UnboundedSender<ReplicatorMsg>
+    tx_repl: mpsc::UnboundedSender<ReplicatorMsg>,
+    heartbeat: Duration
 }
 
 impl<T: ClientData, R: Tracker<Entity=T>> Replicator<T, R> {
     pub fn new(node: Node, next_index: u64, term: u64, tracker: Arc<RwLock<R>>,
         id: NodeID, rx_repl: mpsc::UnboundedReceiver<ReplicatorMsg>, 
-        tx_repl: mpsc::UnboundedSender<ReplicatorMsg>) -> Replicator<T, R> {
+        tx_repl: mpsc::UnboundedSender<ReplicatorMsg>, heartbeat: Duration) -> Replicator<T, R> {
         Replicator {
             node,
             next_index,
@@ -114,7 +123,8 @@ impl<T: ClientData, R: Tracker<Entity=T>> Replicator<T, R> {
             match_index: 0,
             state: ReplicationState::UpToDate,
             rx_repl,
-            tx_repl
+            tx_repl,
+            heartbeat
         }
     }
 
@@ -150,6 +160,29 @@ impl<T: ClientData, R: Tracker<Entity=T>> Replicator<T, R> {
         Ok(())
     }
 
+    pub async fn creat_append_request(&self, index: u64) -> crate::Result<AppendEntriesRequest> {
+        let tracker = self.tracker.read().await;
+        let entity = tracker.get_log_entity(index);
+        let s_entity = serde_json::to_string(&entity)?; 
+        let entry = Entry {
+            payload: s_entity
+        };
+        Ok(AppendEntriesRequest {
+            term: self.term,
+            leader_id: self.id.to_string(),
+            prev_log_index: self.next_index - 1,
+            prev_log_term: tracker.get_log_term(self.next_index - 1),
+            entries: vec![entry]
+        })
+    }
+
+    pub async fn append_entry(&self, index: u64) -> crate::Result<AppendEntriesResponse> {
+        let request = self.creat_append_request(index).await?; 
+        let node = self.get_node();
+        let response = rpc::append_entries(&node, request).await?;
+        Ok(response)
+    }
+
     pub fn get_node(&self) -> Node {
         self.node.clone()
     }
@@ -159,7 +192,6 @@ impl<T: ClientData, R: Tracker<Entity=T>> Replicator<T, R> {
 struct Lagged<'a, T: ClientData, R: Tracker<Entity=T>> {
     replicator: &'a mut Replicator<T, R>
 }
-
 
 impl<'a, T: ClientData, R: Tracker<Entity=T>> Lagged<'a, T, R> {
     pub fn new(replicator: &'a mut Replicator<T, R>) -> Lagged<'a, T, R> {
@@ -216,33 +248,13 @@ impl<'a, T: ClientData, R: Tracker<Entity=T>> Updating<'a, T, R> {
         loop {
             let tracker = self.replicator.tracker.read().await;
             let last_log_index = tracker.get_last_log_index();
+            drop(tracker);
             if self.replicator.next_index > last_log_index {
                 self.replicator.state = ReplicationState::UpToDate;
                 break;
             }
-            let entity = tracker.get_log_entity(self.replicator.next_index);
-            let s_entity = match serde_json::to_string(&entity) {
-                Ok(string) => string,
-                Err(err) => {
-                    error!(cause = %err, "Caused an error: ");
-                    self.replicator.state = ReplicationState::Lagged;
-                    break;
-                }
-            };
-            let entry = Entry {
-                payload: s_entity
-            };
-            let request = AppendEntriesRequest {
-                term: self.replicator.term,
-                leader_id: self.replicator.id.to_string(),
-                prev_log_index: self.replicator.next_index - 1,
-                prev_log_term: tracker.get_log_term(self.replicator.next_index - 1),
-                entries: vec![entry]
-            };
-            drop(tracker);
-            let node = self.replicator.get_node();
-            let result = rpc::append_entries(&node, request).await;
-            let response = match result {
+            let response = match self.replicator
+                .append_entry(self.replicator.next_index).await {
                 Ok(resp) => resp,
                 Err(err) => {
                     error!(cause = %err, "Caused an error: ");
@@ -253,15 +265,16 @@ impl<'a, T: ClientData, R: Tracker<Entity=T>> Updating<'a, T, R> {
                 self.replicator.state = ReplicationState::Lagged;
                 break;
             }
+            self.replicator.match_index = self.replicator.next_index;
             self.replicator.next_index += 1;
         }
     }
 }
 
+
 struct UpToDate<'a, T: ClientData, R: Tracker<Entity=T>> {
     replicator: &'a mut Replicator<T, R>
 }
-
 
 impl<'a, T: ClientData, R: Tracker<Entity=T>> UpToDate<'a, T, R> {
     pub fn new(replicator: &'a mut Replicator<T, R>) -> UpToDate<'a, T, R> {
@@ -271,7 +284,41 @@ impl<'a, T: ClientData, R: Tracker<Entity=T>> UpToDate<'a, T, R> {
     }
 
     pub async fn run(&mut self) {
-
+        loop {
+            let timeout = sleep_until(Instant::now() + self.replicator.heartbeat);
+            tokio::select! {
+                _ = timeout => { 
+                    let _ = self.replicator.beat().await;
+                },
+                Some(msg) = self.replicator.rx_repl.recv() => { 
+                    let _ = self.handle_replication_msg(msg);
+                }
+            }
+        }
     }
+
+    pub async fn handle_replication_msg(&mut self, msg: ReplicatorMsg) 
+        -> crate::Result<()> {
+        match msg {
+            ReplicatorMsg::ReplicateReq{ index } => {
+                let response = self.replicator.append_entry(index).await?;
+                if !response.success {
+                    self.replicator.state = ReplicationState::Lagged;
+                }
+                self.replicator.match_index = self.replicator.next_index;
+                self.replicator.next_index += 1;
+
+                self.replicator.tx_repl.send(ReplicatorMsg::ReplicateResp {
+                    match_index: self.replicator.match_index,
+                    next_index: self.replicator.next_index,
+                    id: self.replicator.id.clone()
+                })?;
+
+            },
+            _ => unreachable!()
+        }
+        Ok(())
+    }
+
 }
 
