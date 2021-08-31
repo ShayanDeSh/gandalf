@@ -2,9 +2,10 @@ use crate::{Raft, ClientData, Tracker, RaftMessage, Node, NodeID};
 use crate::raft::State;
 use tracing::{instrument, error, debug};
 use tokio::time::{Instant, sleep_until, Duration};
-use tokio::sync::{mpsc, RwLock};
+use tokio::sync::{mpsc, RwLock, oneshot};
 use crate::raft_rpc::{AppendEntriesRequest, Entry, AppendEntriesResponse};
 use crate::rpc;
+use std::collections::BTreeMap;
 
 use std::sync::Arc;
 
@@ -12,71 +13,11 @@ use std::sync::Arc;
 pub struct Leader <'a, T: ClientData, R: Tracker<Entity=T>> {
     raft: &'a mut Raft<T, R>,
     replicators: Vec<mpsc::UnboundedSender<ReplicatorMsg>>,
-    rx_repl: mpsc::UnboundedReceiver<ReplicatorMsg>
+    rx_repl: mpsc::UnboundedReceiver<ReplicatorMsg>,
+    commit_queue: BTreeMap<u64, oneshot::Sender<RaftMessage<T>>>
 }
 
-impl<'a, T: ClientData, R: Tracker<Entity=T>> Leader<'a, T, R> {
-    pub fn new(raft:&'a mut Raft<T, R>) -> Leader<T, R> {
-        let mut replicators = Vec::new();
-
-        let (tx_repl, rx_core_repl) = mpsc::unbounded_channel();
-
-        for node in raft.get_all_nodes().into_iter() {
-            let (tx_core_repl, rx_repl) = mpsc::unbounded_channel();
-
-            let mut replicator = Replicator::new(node, raft.last_log_index + 1,
-                raft.current_term, raft.tracker.clone(), raft.id.clone(),
-                rx_repl, tx_repl.clone(), raft.heartbeat);
-
-            tokio::spawn(async move {
-                replicator.run().await;
-            });
-
-            replicators.push(tx_core_repl);
-        }
-
-        Leader { raft , replicators, rx_repl: rx_core_repl }
-    }
-
-    #[instrument(level="trace", skip(self))]
-    pub async fn run(&mut self) -> crate::Result<()> {
-        debug!("Running at Leader State");
-        while self.is_leader() {
-            tokio::select! {
-                Some(request) = self.raft.rx_rpc.recv() => 
-                    self.handle_api_request(request).await?,
-            }
-        }
-        Ok(())
-    }
-
-    async fn handle_api_request(&mut self, request: RaftMessage<T>) -> crate::Result<()> {
-       match request {
-           RaftMessage::ClientReadMsg {body, tx} => {
-               let tracker = self.raft.tracker.read().await;
-               let response = tracker.propagate(&body).await?;
-               if let Err(_) = tx.send(RaftMessage::ClientResp { body: response }) {
-                   error!("Peer drop the client response");
-               }
-           },
-           RaftMessage::ClientWriteMsg {body, tx} => {
-               let mut tracker = self.raft.tracker.write().await;
-               let index = tracker.append_log(body, self.raft.last_log_term)?;
-               self.raft.last_log_index = index;
-               
-           },
-           _ => unreachable!()
-       }
-       Ok(())
-    }
-
-    fn is_leader(&self) -> bool {
-        self.raft.state == State::Leader
-    }
-
-}
-
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 enum ReplicatorMsg {
     ReplicateReq {
         index: u64
@@ -84,7 +25,7 @@ enum ReplicatorMsg {
     ReplicateResp {
         next_index: u64,
         match_index: u64,
-        id: NodeID
+        id: NodeID 
     }
 }
 
@@ -108,6 +49,110 @@ struct Replicator <T: ClientData, R: Tracker<Entity=T>> {
     rx_repl: mpsc::UnboundedReceiver<ReplicatorMsg>,
     tx_repl: mpsc::UnboundedSender<ReplicatorMsg>,
     heartbeat: Duration
+}
+
+impl<'a, T: ClientData, R: Tracker<Entity=T>> Leader<'a, T, R> {
+    pub fn new(raft:&'a mut Raft<T, R>) -> Leader<T, R> {
+        let mut replicators = Vec::new();
+
+        let (tx_repl, rx_core_repl) = mpsc::unbounded_channel();
+
+        for node in raft.get_all_nodes().into_iter() {
+            let (tx_core_repl, rx_repl) = mpsc::unbounded_channel();
+
+            let mut replicator = Replicator::new(node, raft.last_log_index + 1,
+                raft.current_term, raft.tracker.clone(), raft.id.clone(),
+                rx_repl, tx_repl.clone(), raft.heartbeat);
+
+            tokio::spawn(async move {
+                replicator.run().await;
+            });
+
+            replicators.push(tx_core_repl);
+        }
+
+        Leader { raft, replicators, rx_repl: rx_core_repl,
+        commit_queue: BTreeMap::new()}
+    }
+
+    #[instrument(level="trace", skip(self))]
+    pub async fn run(&mut self) -> crate::Result<()> {
+        debug!("Running at Leader State");
+        while self.is_leader() {
+            tokio::select! {
+                Some(request) = self.raft.rx_rpc.recv() => 
+                    self.handle_api_request(request).await?,
+                Some(request) = self.rx_repl.recv() =>  {
+                    self.handle_replicator_resp(request).await?
+                }
+            }
+        }
+        Ok(())
+    }
+
+    async fn handle_api_request(&mut self, request: RaftMessage<T>) -> crate::Result<()> {
+       match request {
+           RaftMessage::ClientReadMsg {body, tx} => {
+               let tracker = self.raft.tracker.read().await;
+               let response = tracker.propagate(&body).await?;
+               if let Err(_) = tx.send(RaftMessage::ClientResp { body: response }) {
+                   error!("Peer drop the client response");
+               }
+           },
+           RaftMessage::ClientWriteMsg {body, tx} => {
+               let mut tracker = self.raft.tracker.write().await;
+               let index = tracker.append_log(body, self.raft.last_log_term)?;
+               self.raft.last_log_index = index;
+               self.commit_queue.insert(index, tx);
+               let repl_req = ReplicatorMsg::ReplicateReq{index};
+               for replicator in &self.replicators {
+                   replicator.send(repl_req.clone());
+               }
+           },
+           _ => unreachable!()
+       }
+       Ok(())
+    }
+
+    async fn handle_replicator_resp(&mut self, request: ReplicatorMsg) -> crate::Result<()> {
+        match request {
+            ReplicatorMsg::ReplicateResp{next_index, match_index, id} => {
+                let node_state = self.raft.nodes_state.get_mut(&id);
+                if let Some(state) = node_state {
+                    state.next_index = next_index;
+                    state.match_index = match_index;
+                }
+                self.check_for_commit(match_index);
+            },
+            _ => unreachable!()
+        }
+        Ok(())
+    }
+
+    fn is_leader(&self) -> bool {
+        self.raft.state == State::Leader
+    }
+
+    async fn check_for_commit(&mut self, index: u64) -> crate::Result<()> {
+        if self.raft.commit_index < index {
+            let number = self.raft.nodes_state.values()
+                .into_iter()
+                .fold(0, |acc, s| if s.match_index >= index {acc + 1} else {acc});
+
+            let mut tracker = self.raft.tracker.write().await;
+
+            if number > self.raft.nodes.len() {
+                for i in self.raft.commit_index..index {
+                    let frame = tracker.commit(i).await?;
+                    if let Some(tx) = self.commit_queue.remove(&i) {
+                        tx.send(RaftMessage::ClientResp{ body: frame });
+                    }
+                }
+            }
+        }
+        Ok(())
+    }
+
 }
 
 impl<T: ClientData, R: Tracker<Entity=T>> Replicator<T, R> {
@@ -271,7 +316,6 @@ impl<'a, T: ClientData, R: Tracker<Entity=T>> Updating<'a, T, R> {
     }
 }
 
-
 struct UpToDate<'a, T: ClientData, R: Tracker<Entity=T>> {
     replicator: &'a mut Replicator<T, R>
 }
@@ -321,4 +365,3 @@ impl<'a, T: ClientData, R: Tracker<Entity=T>> UpToDate<'a, T, R> {
     }
 
 }
-
