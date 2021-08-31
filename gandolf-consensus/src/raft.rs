@@ -1,4 +1,4 @@
-use std::collections::HashSet;
+use std::collections::{HashSet, BTreeMap};
 use std::sync::{Arc};
 
 use rand::{thread_rng, Rng};
@@ -8,7 +8,7 @@ use tokio::sync::{mpsc, RwLock};
 
 use tracing::debug;
 
-use crate::{NodeID, Node, RaftMessage, ConfigMap, ClientData, Tracker};
+use crate::{NodeID, Node, NodeState, RaftMessage, ConfigMap, ClientData, Tracker};
 use crate::state_machine::{Follower, Candidate, Leader};
 
 
@@ -33,20 +33,18 @@ pub struct Raft<T: ClientData, R: Tracker<Entity=T>> {
     pub voted_for: Option<NodeID>,
     pub current_leader: Option<NodeID>,
     pub nodes: HashSet<Node>,
+    pub nodes_state: BTreeMap<NodeID, NodeState>,
     pub rx_rpc: mpsc::UnboundedReceiver<RaftMessage<T>>,
     pub election_timeout: u64,
     pub heartbeat: Duration,
     pub tracker: Arc<RwLock<R>>
 }
 
-
-
-
 impl<T: ClientData, R: Tracker<Entity=T>> Raft<T, R> {
     pub fn new(config: ConfigMap, rx_rpc: mpsc::UnboundedReceiver<RaftMessage<T>>,
-        tracker: Arc<RwLock<R>>) -> Raft<T, R> {
+        tracker: Arc<RwLock<R>>, id: String) -> Raft<T, R> {
         Raft {
-            id: NodeID::new_v4(),
+            id,
             state: State::Follower,
             current_term: 0,
             commit_index: 0,

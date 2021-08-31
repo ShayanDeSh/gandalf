@@ -64,8 +64,8 @@ pub async fn run<T: ClientData, P: Parser<T>, R: Tracker<Entity=T>>(shutdown: im
             let _ = listener.run(parser).await;
         }
     );
-
-    let mut raft = Raft::new(config, rx_rpc, Arc::new(RwLock::new(tracker)));
+    let id = format!("{}:{}", config.host, config.port);
+    let mut raft = Raft::new(config, rx_rpc, Arc::new(RwLock::new(tracker)), id);
     tokio::select! {
         res = raft.run() => {
             if let Err(err) = res {

@@ -1,7 +1,7 @@
 use uuid::Uuid;
 use std::net::{IpAddr, SocketAddr};
 use tokio::sync::oneshot;
-use std::collections::HashSet;
+use std::collections::{HashSet, BTreeMap};
 use serde::{de::DeserializeOwned, Serialize};
 
 pub const DEFAULT_PORT: &str = "7899";
@@ -32,15 +32,21 @@ pub type Error = Box<dyn std::error::Error + Send + Sync>;
 
 pub type Result<T> = std::result::Result<T, Error>;
 
-pub type NodeID = Uuid;
+pub type NodeID = String;
 
 pub trait ClientData: Send + Sync + Clone + Serialize + DeserializeOwned + std::fmt::Debug + 'static {}
 
 #[derive(Debug, Clone, Hash, Eq, PartialEq)]
 pub struct Node {
-    id: Option<NodeID>,
+    id: NodeID,
     ip: IpAddr,
     port: u16,
+}
+
+#[derive(Debug)]
+pub struct NodeState {
+    match_index: u64,
+    next_index: u64
 }
 
 #[derive(Debug)]
@@ -78,13 +84,20 @@ pub struct ConfigMap {
     host: String,
     port: u16,
     nodes: HashSet<Node>,
+    nodes_state: BTreeMap<NodeID, NodeState>,
     heartbeat: u64,
     timeout: u64
 }
 
 impl Node {
-    pub fn new(id: Option<NodeID>, ip: IpAddr, port: u16) -> Node {
+    pub fn new(id: NodeID, ip: IpAddr, port: u16) -> Node {
         Node { id, ip, port }
+    }
+}
+
+impl NodeState {
+    pub fn new(match_index: u64, next_index: u64) -> NodeState {
+        NodeState { match_index, next_index }
     }
 }
 
@@ -93,12 +106,17 @@ impl ConfigMap {
         timeout: u64) -> Result<ConfigMap> {
 
         let mut nodes = HashSet::new();
+        let mut nodes_state = BTreeMap::new();
 
         for node_raw in nodes_raw.into_iter() {
             let node: SocketAddr = node_raw.parse()?;
-            nodes.insert(Node::new(None, node.ip(), node.port()));
+            let id = format!("{}:{}", node.ip(), node.port());
+            let node_state = NodeState::new(0, 0);
+            nodes.insert(Node::new(id, node.ip(), node.port()));
+            nodes_state.insert(id, node_state);
         }
 
-        Ok(ConfigMap { host, port, nodes, heartbeat, timeout })
+        Ok(ConfigMap { host, port, nodes, heartbeat, timeout, nodes_state})
+
     }
 }

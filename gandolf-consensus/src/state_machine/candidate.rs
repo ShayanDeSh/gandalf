@@ -26,7 +26,7 @@ impl<'a, T: ClientData, R: Tracker<Entity=T>> Candidate<'a, T, R> {
         while self.is_candidate() {
             self.raft.current_term += 1;
 
-            self.raft.voted_for = Some(self.raft.id);
+            self.raft.voted_for = Some(self.raft.id.clone());
             self.number_of_votes = 1;
 
             let mut vote_rx = self.ask_for_votes();

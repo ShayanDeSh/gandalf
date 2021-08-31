@@ -62,7 +62,7 @@ impl<'a, T: ClientData, R: Tracker<Entity=T>> Follower<'a, T, R> {
                 status: None
             }
         }
-        match self.raft.voted_for {
+        match &self.raft.voted_for {
             Some(candidate_id) if candidate_id.to_string() == body.candidate_id => {
                 return RaftMessage::VoteResp {
                     payload: RequestVoteResponse {
