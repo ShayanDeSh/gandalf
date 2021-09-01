@@ -148,6 +148,7 @@ impl<'a, T: ClientData, R: Tracker<Entity=T>> Leader<'a, T, R> {
             if number > self.raft.nodes.len() {
                 for i in self.raft.commit_index..index {
                     let frame = tracker.commit(i).await?;
+                    self.raft.commit_index = i;
                     if let Some(tx) = self.commit_queue.remove(&i) {
                         let _ = tx.send(RaftMessage::ClientResp{ body: frame });
                     }
