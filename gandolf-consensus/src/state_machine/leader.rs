@@ -59,9 +59,13 @@ impl<'a, T: ClientData, R: Tracker<Entity=T>> Leader<'a, T, R> {
 
         for node in raft.get_all_nodes().into_iter() {
             let (tx_core_repl, rx_repl) = mpsc::unbounded_channel();
-
+            let match_index = if let Some(state) = raft.nodes_state.get(&node.id) {
+                state.match_index
+            } else {
+                0
+            };
             let mut replicator = Replicator::new(node, raft.last_log_index + 1,
-                raft.current_term, raft.tracker.clone(), raft.id.clone(),
+                match_index, raft.current_term, raft.tracker.clone(), raft.id.clone(),
                 rx_repl, tx_repl.clone(), raft.heartbeat);
 
             tokio::spawn(async move {
@@ -106,7 +110,7 @@ impl<'a, T: ClientData, R: Tracker<Entity=T>> Leader<'a, T, R> {
                self.commit_queue.insert(index, tx);
                let repl_req = ReplicatorMsg::ReplicateReq{index};
                for replicator in &self.replicators {
-                   replicator.send(repl_req.clone());
+                   let _ = replicator.send(repl_req.clone());
                }
            },
            _ => unreachable!()
@@ -122,7 +126,7 @@ impl<'a, T: ClientData, R: Tracker<Entity=T>> Leader<'a, T, R> {
                     state.next_index = next_index;
                     state.match_index = match_index;
                 }
-                self.check_for_commit(match_index);
+                self.check_for_commit(match_index).await?;
             },
             _ => unreachable!()
         }
@@ -145,7 +149,7 @@ impl<'a, T: ClientData, R: Tracker<Entity=T>> Leader<'a, T, R> {
                 for i in self.raft.commit_index..index {
                     let frame = tracker.commit(i).await?;
                     if let Some(tx) = self.commit_queue.remove(&i) {
-                        tx.send(RaftMessage::ClientResp{ body: frame });
+                        let _ = tx.send(RaftMessage::ClientResp{ body: frame });
                     }
                 }
             }
@@ -156,16 +160,18 @@ impl<'a, T: ClientData, R: Tracker<Entity=T>> Leader<'a, T, R> {
 }
 
 impl<T: ClientData, R: Tracker<Entity=T>> Replicator<T, R> {
-    pub fn new(node: Node, next_index: u64, term: u64, tracker: Arc<RwLock<R>>,
-        id: NodeID, rx_repl: mpsc::UnboundedReceiver<ReplicatorMsg>, 
-        tx_repl: mpsc::UnboundedSender<ReplicatorMsg>, heartbeat: Duration) -> Replicator<T, R> {
+    pub fn new(node: Node, next_index: u64, match_index: u64, term: u64,
+        tracker: Arc<RwLock<R>>, id: NodeID,
+        rx_repl: mpsc::UnboundedReceiver<ReplicatorMsg>, 
+        tx_repl: mpsc::UnboundedSender<ReplicatorMsg>, heartbeat: Duration)
+        -> Replicator<T, R> {
         Replicator {
             node,
             next_index,
             term,
             tracker,
             id,
-            match_index: 0,
+            match_index,
             state: ReplicationState::UpToDate,
             rx_repl,
             tx_repl,
@@ -193,7 +199,8 @@ impl<T: ClientData, R: Tracker<Entity=T>> Replicator<T, R> {
             leader_id: self.id.to_string(),
             prev_log_index: self.next_index - 1,
             prev_log_term: tracker.get_log_term(self.next_index - 1),
-            entries: vec![]
+            entries: vec![],
+            leader_commit: tracker.get_last_commited_index()
         };
         drop(tracker);
         let node = self.get_node();
@@ -217,11 +224,13 @@ impl<T: ClientData, R: Tracker<Entity=T>> Replicator<T, R> {
             leader_id: self.id.to_string(),
             prev_log_index: self.next_index - 1,
             prev_log_term: tracker.get_log_term(self.next_index - 1),
-            entries: vec![entry]
+            entries: vec![entry],
+            leader_commit: tracker.get_last_commited_index()
         })
     }
 
-    pub async fn append_entry(&self, index: u64) -> crate::Result<AppendEntriesResponse> {
+    pub async fn append_entry(&self, index: u64) 
+        -> crate::Result<AppendEntriesResponse> {
         let request = self.creat_append_request(index).await?; 
         let node = self.get_node();
         let response = rpc::append_entries(&node, request).await?;
@@ -257,7 +266,8 @@ impl<'a, T: ClientData, R: Tracker<Entity=T>> Lagged<'a, T, R> {
                 leader_id: self.replicator.id.to_string(),
                 prev_log_index: self.replicator.next_index - 1,
                 prev_log_term: tracker.get_log_term(self.replicator.next_index - 1),
-                entries: vec![]
+                entries: vec![],
+                leader_commit: tracker.get_last_commited_index()
             };
             drop(tracker);
             let node = self.replicator.get_node();
@@ -355,7 +365,7 @@ impl<'a, T: ClientData, R: Tracker<Entity=T>> UpToDate<'a, T, R> {
                 self.replicator.tx_repl.send(ReplicatorMsg::ReplicateResp {
                     match_index: self.replicator.match_index,
                     next_index: self.replicator.next_index,
-                    id: self.replicator.id.clone()
+                    id: self.replicator.node.id.clone()
                 })?;
 
             },

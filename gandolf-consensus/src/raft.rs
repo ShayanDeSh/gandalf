@@ -54,6 +54,7 @@ impl<T: ClientData, R: Tracker<Entity=T>> Raft<T, R> {
             voted_for: None,
             current_leader: None,
             nodes: config.nodes,
+            nodes_state: config.nodes_state,
             rx_rpc,
             election_timeout: config.timeout,
             heartbeat: Duration::from_millis(config.heartbeat),
