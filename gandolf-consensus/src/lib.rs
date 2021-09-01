@@ -112,7 +112,7 @@ impl ConfigMap {
             let node: SocketAddr = node_raw.parse()?;
             let id = format!("{}:{}", node.ip(), node.port());
             let node_state = NodeState::new(0, 0);
-            nodes.insert(Node::new(id, node.ip(), node.port()));
+            nodes.insert(Node::new(id.clone(), node.ip(), node.port()));
             nodes_state.insert(id, node_state);
         }
 
