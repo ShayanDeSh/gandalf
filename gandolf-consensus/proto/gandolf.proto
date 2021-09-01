@@ -16,6 +16,7 @@ message AppendEntriesRequest {
     uint64 prev_log_index = 3;
     uint64 prev_log_term = 4;
     repeated Entry entries = 5;
+    uint64 leader_commit = 6;
 }
 
 message Entry {
