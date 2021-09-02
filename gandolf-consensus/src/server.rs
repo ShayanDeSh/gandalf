@@ -21,7 +21,7 @@ use bytes::BytesMut;
 
 use std::marker::PhantomData;
 
-use std::sync::{Arc};
+use std::sync::Arc;
 
 pub struct Listener<P: Parser<T>, T: ClientData> {
     listener: TcpListener,
@@ -41,7 +41,8 @@ pub struct Handler<P: Parser<T>, T: ClientData> {
 pub async fn run<T: ClientData, P: Parser<T>, R: Tracker<Entity=T>>(shutdown: impl Future,
     config: ConfigMap, parser: P, tracker: R) -> crate::Result<()> {
     let addr = format!("{}:{}", config.host, config.port).parse()?;
-    let tcp_listener = TcpListener::bind(&format!("127.0.0.1:{}", 9999)).await?;
+    let tcp_listener = TcpListener::bind(&format!("{}:{}",
+            config.connecntion_host, config.connecntion_port)).await?;
 
     let (tx_rpc, rx_rpc) = mpsc::unbounded_channel();
 

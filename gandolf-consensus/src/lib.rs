@@ -83,6 +83,8 @@ pub enum RaftMessage<T: ClientData> {
 pub struct ConfigMap {
     host: String,
     port: u16,
+    connecntion_host: String,
+    connecntion_port: u16,
     nodes: HashSet<Node>,
     nodes_state: BTreeMap<NodeID, NodeState>,
     heartbeat: u64,
@@ -103,7 +105,8 @@ impl NodeState {
 
 impl ConfigMap {
     pub fn new(host: String, port: u16, nodes_raw: Vec<String>, heartbeat: u64,
-        timeout: u64) -> Result<ConfigMap> {
+        timeout: u64, connecntion_host: String, connecntion_port: u16) 
+        -> Result<ConfigMap> {
 
         let mut nodes = HashSet::new();
         let mut nodes_state = BTreeMap::new();
@@ -116,7 +119,16 @@ impl ConfigMap {
             nodes_state.insert(id, node_state);
         }
 
-        Ok(ConfigMap { host, port, nodes, heartbeat, timeout, nodes_state})
+        Ok(ConfigMap {
+            host,
+            port,
+            nodes,
+            heartbeat,
+            timeout,
+            nodes_state,
+            connecntion_port,
+            connecntion_host 
+        })
 
     }
 }

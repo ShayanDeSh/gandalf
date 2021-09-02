@@ -20,9 +20,9 @@ pub async fn main() -> Result<(), gandolf_consensus::Error> {
     let nodes = cli.nodes.ok_or("You must pass list of nodes")?;
 
     let config = ConfigMap::new(cli.host, cli.port, nodes, cli.heartbeat,
-        cli.timeout)?;
+        cli.timeout, cli.connection_host, cli.connection_port)?;
 
-    let address = "127.0.0.1:9736".parse()?;
+    let address = format!("{}:{}", cli.client_host, cli.client_port).parse()?;
 
     let tracker = KvsTracker::new(address);
 
@@ -49,4 +49,17 @@ struct Cli {
 
     #[structopt(name = "timeout", long = "--timeout", default_value = TIMEOUT)]
     timeout: u64,
+
+    #[structopt(name = "client_port", long = "--client_port")]
+    client_port: u16,
+
+    #[structopt(name = "client_host", long = "--client_host")]
+    client_host: String,
+
+    #[structopt(name = "connection_port", long = "--connection_port")]
+    connection_port: u16,
+
+    #[structopt(name = "connection_host", long = "--connection_host")]
+    connection_host: String
+
 }
