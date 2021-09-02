@@ -1,6 +1,6 @@
 use crate::{Raft, ClientData, Tracker, RaftMessage};
 use crate::raft::State;
-use tracing::{instrument, debug, error};
+use tracing::{instrument, trace, error};
 use tokio::time::sleep_until;
 use crate::raft_rpc::{RequestVoteRequest, RequestVoteResponse, AppendEntriesResponse, AppendEntriesRequest};
 
@@ -16,7 +16,7 @@ impl<'a, T: ClientData, R: Tracker<Entity=T>> Follower<'a, T, R> {
 
     #[instrument(level="trace", skip(self))]
     pub async fn run(&mut self) -> crate::Result<()> {
-        debug!("Running at Follower State");
+        trace!("Running at Follower State");
         while self.is_follower() {
             let election_timeout = sleep_until(self.raft.generate_timeout());
 
@@ -51,6 +51,7 @@ impl<'a, T: ClientData, R: Tracker<Entity=T>> Follower<'a, T, R> {
         Ok(())
     }
 
+    #[instrument(level="trace", skip(self))]
     fn handle_vote_request(&self, body: RequestVoteRequest) -> RaftMessage<T> {
         if self.raft.current_term > body.term {
             return RaftMessage::VoteResp {
@@ -102,6 +103,7 @@ impl<'a, T: ClientData, R: Tracker<Entity=T>> Follower<'a, T, R> {
         }
     }
 
+    #[instrument(level="trace", skip(self))]
     async fn handle_append_entry(&mut self, body: AppendEntriesRequest) -> RaftMessage<T> {
         if self.raft.current_term > body.term {
             return RaftMessage::AppendResp {
