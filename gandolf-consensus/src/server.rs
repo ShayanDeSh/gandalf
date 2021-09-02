@@ -138,7 +138,8 @@ impl<P: Parser<T>, T: ClientData> Handler<P, T> {
 
                 match resp {
                     RaftMessage::ClientResp{body} =>  {
-                        info!("{:?}", body);
+                        let buf = self.parser.unparse(body);
+                        self.stream.write_all(&buf).await?;
                     },
                     _ => {return Err("Unkown response recived".into());}
                 }
@@ -151,7 +152,6 @@ impl<P: Parser<T>, T: ClientData> Handler<P, T> {
                     return Err("connection reset by peer".into());
                 }
             }
-
         }
     }
 }
