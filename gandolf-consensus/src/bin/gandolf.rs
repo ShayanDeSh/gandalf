@@ -1,3 +1,4 @@
+use serde::{Serialize, Deserialize};
 use gandolf_consensus::{server, ConfigMap};
 use gandolf_consensus::{DEFAULT_PORT, HEARTBEAT, TIMEOUT};
 
@@ -8,14 +9,28 @@ use structopt::StructOpt;
 
 use gandolf_consensus::client::kvs::{KvsParser, KvsTracker}; 
 
+fn read_config(path: &str) -> serde_yaml::Result<Option<Cli>> {
+    let config_file = std::fs::File::open(path).ok();
+    if let Some(file) = config_file {
+        let config = serde_yaml::from_reader(file)?;
+        return Ok(Some(config));
+    }
+    Ok(None)
+}
+
 
 #[tokio::main]
 pub async fn main() -> Result<(), gandolf_consensus::Error> {
     tracing_subscriber::fmt::try_init()?;
 
     let cli = Cli::from_args();
-    println!("{:?}", cli);
 
+    let cli = if let Some(conf) = 
+        read_config(&cli.config).map_err(|err| err.to_string())? {
+        conf
+    } else {
+        cli
+    };
 
     let nodes = cli.nodes.ok_or("You must pass list of nodes")?;
 
@@ -31,7 +46,7 @@ pub async fn main() -> Result<(), gandolf_consensus::Error> {
     Ok(())
 }
 
-#[derive(StructOpt, Debug)]
+#[derive(StructOpt, Debug, Serialize, Deserialize)]
 #[structopt(name = "gandolf", version = env!("CARGO_PKG_VERSION"),
     author = env!("CARGO_PKG_AUTHORS"), about = "gandolf consensus system")]
 struct Cli {
@@ -50,16 +65,19 @@ struct Cli {
     #[structopt(name = "timeout", long = "--timeout", default_value = TIMEOUT)]
     timeout: u64,
 
-    #[structopt(name = "client_port", long = "--client_port")]
+    #[structopt(name = "client_port", long = "--client_port", default_value = "9736")]
     client_port: u16,
 
-    #[structopt(name = "client_host", long = "--client_host")]
+    #[structopt(name = "client_host", long = "--client_host", default_value = "127.0.0.1")]
     client_host: String,
 
-    #[structopt(name = "connection_port", long = "--connection_port")]
+    #[structopt(name = "connection_port", long = "--connection_port", default_value = "9876")]
     connection_port: u16,
 
-    #[structopt(name = "connection_host", long = "--connection_host")]
-    connection_host: String
+    #[structopt(name = "connection_host", long = "--connection_host", default_value = "127.0.0.1")]
+    connection_host: String,
 
+    #[structopt(name = "config", long = "--config", default_value = "/etc/gandolf.conf")]
+    #[serde(skip)]
+    config: String
 }
