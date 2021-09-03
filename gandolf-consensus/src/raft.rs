@@ -6,7 +6,7 @@ use rand::{thread_rng, Rng};
 use tokio::time::{Duration, Instant};
 use tokio::sync::{mpsc, RwLock};
 
-use tracing::debug;
+use tracing::info;
 
 use crate::{NodeID, Node, NodeState, RaftMessage, ConfigMap, ClientData, Tracker};
 use crate::state_machine::{Follower, Candidate, Leader};
@@ -70,14 +70,12 @@ impl<T: ClientData, R: Tracker<Entity=T>> Raft<T, R> {
                 },
                 State::Candidate => {
                     Candidate::new(self).run().await?;
-                    return Ok(());
                 },
                 State::Leader => {
                     Leader::new(self).run().await?;
-                    return Ok(());
                 },
                 State::NonVoter => {
-                    debug!("Running at NonVoter State");
+                    info!("Running at NonVoter State");
                     return Ok(());
                 }
             }
