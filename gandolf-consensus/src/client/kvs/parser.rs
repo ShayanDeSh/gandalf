@@ -1,6 +1,5 @@
 use bytes::{Buf, BufMut, BytesMut, Bytes};
 use std::io::Cursor;
-use std::io::Write;
 
 use gandolf_kvs::frame::{self, Frame};
 use gandolf_kvs::Command;

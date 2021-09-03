@@ -1,4 +1,3 @@
-use uuid::Uuid;
 use std::net::{IpAddr, SocketAddr};
 use tokio::sync::oneshot;
 use std::collections::{HashSet, BTreeMap};

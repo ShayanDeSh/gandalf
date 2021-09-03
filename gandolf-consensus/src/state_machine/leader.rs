@@ -34,7 +34,8 @@ enum ReplicationState {
     UpToDate,
     Lagged,
     NeedSnappshot,
-    Updating
+    Updating,
+
 }
 
 #[derive(Debug)]

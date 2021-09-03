@@ -1,5 +1,3 @@
-use bytes::Bytes;
-
 pub type Index = u64;
 pub type Term  = u64;
 

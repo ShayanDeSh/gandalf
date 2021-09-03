@@ -3,7 +3,7 @@ use tonic::{Request, Response, Status};
 use crate::raft_rpc::raft_rpc_server::RaftRpc;
 use crate::raft_rpc::raft_rpc_client::RaftRpcClient;
 
-use crate::raft_rpc::{AppendEntriesRequest, Entry, AppendEntriesResponse};
+use crate::raft_rpc::{AppendEntriesRequest, AppendEntriesResponse};
 use crate::raft_rpc::{RequestVoteRequest, RequestVoteResponse};
 
 use crate::{Node, RaftMessage, ClientData};
