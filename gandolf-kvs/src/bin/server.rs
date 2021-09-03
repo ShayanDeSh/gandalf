@@ -4,7 +4,7 @@ use structopt::StructOpt;
 use tokio::net::TcpListener;
 use tokio::signal;
 
-use tracing::{info, Level};
+use tracing::info;
 use tracing_subscriber;
 
 #[tokio::main]

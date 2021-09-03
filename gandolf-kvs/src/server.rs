@@ -1,7 +1,7 @@
 use tokio::net::{TcpListener, TcpStream};
 use tokio::time::{self, Duration};
 use tokio::sync::{Semaphore, mpsc, broadcast};
-use tracing::{debug, error, info, instrument};
+use tracing::{debug, error, info};
 
 use std::future::Future;
 use std::sync::Arc;

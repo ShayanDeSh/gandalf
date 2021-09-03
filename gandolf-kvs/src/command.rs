@@ -2,7 +2,7 @@ use crate::{Frame, Parse, Db, Connection};
 
 use bytes::Bytes;
 
-use tracing::{debug, error, info, instrument};
+use tracing::debug;
 
 #[derive(Debug)]
 pub enum Command {
