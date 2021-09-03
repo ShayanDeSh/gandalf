@@ -10,6 +10,8 @@ use crate::{Node, RaftMessage, ClientData};
 
 use tokio::sync::{mpsc, oneshot};
 
+use tracing::info;
+
 #[derive(Debug)]
 pub struct RaftRpcService<T: ClientData> {
     tx_rpc: mpsc::UnboundedSender<RaftMessage<T>>
@@ -52,10 +54,12 @@ impl<T: ClientData> RaftRpc for RaftRpcService<T> {
     async fn request_vote(&self, request: Request<RequestVoteRequest>) 
         -> Result<Response<RequestVoteResponse>, Status> {
         let (tx, rx) = oneshot::channel();
+        let body = request.into_inner();
+        info!("{:?} Asked for vote", &body.candidate_id);
         let resp = self.tx_rpc.send(RaftMessage::VoteMsg{
-            body: request.into_inner(),
+            body: body,
             tx
-        });
+        }); 
         if let Err(err) = resp {
             return Err(Status::internal(err.to_string()));
         }
@@ -77,10 +81,13 @@ impl<T: ClientData> RaftRpc for RaftRpcService<T> {
 
 pub async fn ask_for_vote(node: &Node, request: RequestVoteRequest) 
     -> crate::Result<RequestVoteResponse> {
+    info!("Asking {} for vote", node.id);
     let addr = format!("http://{}:{}", node.ip, node.port);
     let mut client = RaftRpcClient::connect(addr).await?;
     let response = client.request_vote(request).await?;
-    Ok(response.into_inner())
+    let resp = response.into_inner();
+    info!("Answerd with {:?}", resp);
+    Ok(resp)
 }
 
 pub async fn append_entries(node: &Node, request: AppendEntriesRequest) 

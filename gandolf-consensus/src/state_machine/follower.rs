@@ -1,6 +1,6 @@
 use crate::{Raft, ClientData, Tracker, RaftMessage};
 use crate::raft::State;
-use tracing::{instrument, trace, error};
+use tracing::{instrument, info, error};
 use tokio::time::sleep_until;
 use crate::raft_rpc::{RequestVoteRequest, RequestVoteResponse, AppendEntriesResponse, AppendEntriesRequest};
 
@@ -14,14 +14,17 @@ impl<'a, T: ClientData, R: Tracker<Entity=T>> Follower<'a, T, R> {
         Follower { raft }
     }
 
-    #[instrument(level="trace", skip(self))]
+    #[instrument(level="info", skip(self))]
     pub async fn run(&mut self) -> crate::Result<()> {
-        trace!("Running at Follower State");
+        info!("Running at Follower State");
         while self.is_follower() {
             let election_timeout = sleep_until(self.raft.generate_timeout());
 
             tokio::select! {
-                _ = election_timeout => self.raft.set_state(State::Candidate),
+                _ = election_timeout => {
+                    info!("Timed out");
+                    self.raft.set_state(State::Candidate)
+                },
                 Some(request)  = self.raft.rx_rpc.recv() => {
                     match self.handle_api_request(request).await {
                         Ok(_) => continue,
@@ -41,6 +44,7 @@ impl<'a, T: ClientData, R: Tracker<Entity=T>> Follower<'a, T, R> {
     async fn handle_api_request(&mut self, request: RaftMessage<T>) -> crate::Result<()> {
         match request {
             RaftMessage::VoteMsg{body, tx} => {
+                info!("Recived a vote msg from {}", body.candidate_id);
                 let _ = tx.send(self.handle_vote_request(body));
             },
             RaftMessage::AppendMsg{body, tx} => {
@@ -51,8 +55,9 @@ impl<'a, T: ClientData, R: Tracker<Entity=T>> Follower<'a, T, R> {
         Ok(())
     }
 
-    #[instrument(level="trace", skip(self))]
-    fn handle_vote_request(&self, body: RequestVoteRequest) -> RaftMessage<T> {
+    #[instrument(level="info", skip(self))]
+    fn handle_vote_request(&mut self, body: RequestVoteRequest) -> RaftMessage<T> {
+        info!("Current term is {}.", self.raft.current_term);
         if self.raft.current_term > body.term {
             return RaftMessage::VoteResp {
                 payload: RequestVoteResponse {
@@ -62,8 +67,8 @@ impl<'a, T: ClientData, R: Tracker<Entity=T>> Follower<'a, T, R> {
                 status: None
             }
         }
-        else if (self.raft.last_log_term >= body.last_log_term)
-            && (self.raft.last_log_index >= body.last_log_index) {
+        self.raft.current_term = body.term;
+        if (self.raft.last_log_term > body.last_log_term) || (self.raft.last_log_index > body.last_log_index) {
             return RaftMessage::VoteResp {
                 payload: RequestVoteResponse {
                     term: self.raft.current_term,
@@ -103,8 +108,9 @@ impl<'a, T: ClientData, R: Tracker<Entity=T>> Follower<'a, T, R> {
         }
     }
 
-    #[instrument(level="trace", skip(self))]
+    #[instrument(level="info", skip(self))]
     async fn handle_append_entry(&mut self, body: AppendEntriesRequest) -> RaftMessage<T> {
+        info!("Recived and append entry: {:?}", body);
         if self.raft.current_term > body.term {
             return RaftMessage::AppendResp {
                 status: None,
