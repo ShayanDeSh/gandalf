@@ -1,6 +1,6 @@
 use crate::{Raft, ClientData, Tracker, RaftMessage, Node, NodeID};
 use crate::raft::State;
-use tracing::{instrument, error, trace};
+use tracing::{instrument, error, info};
 use tokio::time::{Instant, sleep_until, Duration};
 use tokio::sync::{mpsc, RwLock, oneshot};
 use crate::raft_rpc::{AppendEntriesRequest, Entry, AppendEntriesResponse};
@@ -80,9 +80,9 @@ impl<'a, T: ClientData, R: Tracker<Entity=T>> Leader<'a, T, R> {
         commit_queue: BTreeMap::new()}
     }
 
-    #[instrument(level="trace", skip(self))]
+    #[instrument(level="info", skip(self))]
     pub async fn run(&mut self) -> crate::Result<()> {
-        trace!("Running at Leader State");
+        info!("Running at Leader State");
         while self.is_leader() {
             tokio::select! {
                 Some(request) = self.raft.rx_rpc.recv() => 
@@ -95,11 +95,11 @@ impl<'a, T: ClientData, R: Tracker<Entity=T>> Leader<'a, T, R> {
         Ok(())
     }
 
-    #[instrument(level="trace", skip(self))]
+    #[instrument(level="info", skip(self))]
     async fn handle_api_request(&mut self, request: RaftMessage<T>) -> crate::Result<()> {
        match request {
             RaftMessage::ClientReadMsg {body, tx} => {
-                trace!("Recived A client read message.");
+                info!("Recived A client read message.");
                 let tracker = self.raft.tracker.read().await;
                 let response = tracker.propagate(&body).await?;
                 if let Err(_) = tx.send(RaftMessage::ClientResp { body: response }) {
@@ -107,7 +107,7 @@ impl<'a, T: ClientData, R: Tracker<Entity=T>> Leader<'a, T, R> {
                 }
             },
             RaftMessage::ClientWriteMsg {body, tx} => {
-                trace!("Recived A client write message.");
+                info!("Recived A client write message.");
                 let mut tracker = self.raft.tracker.write().await;
                 let index = tracker.append_log(body, self.raft.last_log_term)?;
                 self.raft.last_log_index = index;
@@ -122,11 +122,11 @@ impl<'a, T: ClientData, R: Tracker<Entity=T>> Leader<'a, T, R> {
        Ok(())
     }
 
-    #[instrument(level="trace", skip(self))]
+    #[instrument(level="info", skip(self))]
     async fn handle_replicator_resp(&mut self, request: ReplicatorMsg) -> crate::Result<()> {
         match request {
             ReplicatorMsg::ReplicateResp{next_index, match_index, id} => {
-                trace!("Recived A Replicator message");
+                info!("Recived A Replicator message");
                 let node_state = self.raft.nodes_state.get_mut(&id);
                 if let Some(state) = node_state {
                     state.next_index = next_index;
@@ -143,7 +143,7 @@ impl<'a, T: ClientData, R: Tracker<Entity=T>> Leader<'a, T, R> {
         self.raft.state == State::Leader
     }
 
-    #[instrument(level="trace", skip(self))]
+    #[instrument(level="info", skip(self))]
     async fn check_for_commit(&mut self, index: u64) -> crate::Result<()> {
         if self.raft.commit_index < index {
             let number = self.raft.nodes_state.values()
@@ -154,7 +154,7 @@ impl<'a, T: ClientData, R: Tracker<Entity=T>> Leader<'a, T, R> {
 
             if number > self.raft.nodes.len() {
                 for i in self.raft.commit_index..index {
-                    trace!("Commiting index {}.", i);
+                    info!("Commiting index {}.", i);
                     let frame = tracker.commit(i).await?;
                     self.raft.commit_index = i;
                     if let Some(tx) = self.commit_queue.remove(&i) {
@@ -213,6 +213,7 @@ impl<T: ClientData, R: Tracker<Entity=T>> Replicator<T, R> {
         };
         drop(tracker);
         let node = self.get_node();
+        info!("beating for {} with {:?}", node.id, request);
         let response = rpc::append_entries(&node, request).await?;
         if !response.success {
             self.state = ReplicationState::Lagged;
@@ -242,6 +243,7 @@ impl<T: ClientData, R: Tracker<Entity=T>> Replicator<T, R> {
         -> crate::Result<AppendEntriesResponse> {
         let request = self.creat_append_request(index).await?; 
         let node = self.get_node();
+        info!("sending append_entries for {} with {:?}", node.id, request);
         let response = rpc::append_entries(&node, request).await?;
         Ok(response)
     }
@@ -263,9 +265,9 @@ impl<'a, T: ClientData, R: Tracker<Entity=T>> Lagged<'a, T, R> {
         }
     }
 
-    #[instrument(level="trace", skip(self))]
+    #[instrument(level="info", skip(self))]
     pub async fn run(&mut self) {
-        trace!(
+        info!(
             id=self.replicator.node.id.as_str(),
             "Replicator running at Lagged state."
             );
@@ -313,14 +315,14 @@ impl<'a, T: ClientData, R: Tracker<Entity=T>> Updating<'a, T, R> {
         }
     }
 
-    #[instrument(level="trace", skip(self))]
+    #[instrument(level="info", skip(self))]
     pub async fn run(&mut self) {
         loop {
-            trace!(
+            info!(
                 id=self.replicator.node.id.as_str(),
                 "Replicator running at Updating state."
                 );
-            trace!("Replicator running at Updating state.");
+            info!("Replicator running at Updating state.");
             let tracker = self.replicator.tracker.read().await;
             let last_log_index = tracker.get_last_log_index();
             drop(tracker);
@@ -357,9 +359,9 @@ impl<'a, T: ClientData, R: Tracker<Entity=T>> UpToDate<'a, T, R> {
         }
     }
 
-    #[instrument(level="trace", skip(self))]
+    #[instrument(level="info", skip(self))]
     pub async fn run(&mut self) {
-        trace!(
+        info!(
             id=self.replicator.node.id.as_str(),
             "Replicator running at UpToDate state."
             );
@@ -376,12 +378,12 @@ impl<'a, T: ClientData, R: Tracker<Entity=T>> UpToDate<'a, T, R> {
         }
     }
 
-    #[instrument(level="trace", skip(self))]
+    #[instrument(level="info", skip(self))]
     pub async fn handle_replication_msg(&mut self, msg: ReplicatorMsg) 
         -> crate::Result<()> {
         match msg {
             ReplicatorMsg::ReplicateReq{ index } => {
-                trace!(
+                info!(
                     id=self.replicator.node.id.as_str(),
                     "Handling replication message."
                     );

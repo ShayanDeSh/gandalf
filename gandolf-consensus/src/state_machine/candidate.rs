@@ -1,6 +1,6 @@
 use crate::{Raft, ClientData, Tracker, RaftMessage};
 use crate::raft::State;
-use tracing::{error, debug};
+use tracing::{error, info};
 use tokio::time::sleep_until;
 use tokio::sync::mpsc;
 use crate::rpc::ask_for_vote;
@@ -22,7 +22,7 @@ impl<'a, T: ClientData, R: Tracker<Entity=T>> Candidate<'a, T, R> {
     }
 
     pub async fn run(&mut self) -> crate::Result<()> {
-        debug!("Running at Candidate State");
+        info!("Running at Candidate State");
         while self.is_candidate() {
             self.raft.current_term += 1;
 
@@ -32,6 +32,7 @@ impl<'a, T: ClientData, R: Tracker<Entity=T>> Candidate<'a, T, R> {
             let mut vote_rx = self.ask_for_votes();
 
             while self.is_candidate() {
+                info!("waiting for vote");
                 let election_timeout = sleep_until(self.raft.generate_timeout());
                 tokio::select! {
                     _ = election_timeout => break,
@@ -44,9 +45,24 @@ impl<'a, T: ClientData, R: Tracker<Entity=T>> Candidate<'a, T, R> {
         Ok(())
     }
 
-    fn handle_api_request(&self, request: RaftMessage<T>) {
+    fn handle_api_request(&mut self, request: RaftMessage<T>) {
         match request {
-            RaftMessage::VoteMsg{tx, ..} => {
+            RaftMessage::VoteMsg{tx, body} => {
+                if body.term > self.raft.current_term &&
+                    (body.last_log_index >= self.raft.last_log_index && body.last_log_term >= self.raft.last_log_term) 
+                {
+                    let resp = RaftMessage::VoteResp {
+                        status: None,
+                        payload: RequestVoteResponse {
+                            term: self.raft.current_term,
+                            vote_granted: true
+                        }
+                    };
+                    let _ = tx.send(resp);
+                    self.raft.current_term = body.term;
+                    self.raft.set_state(State::Leader);
+                    return;
+                }
                 let resp = RaftMessage::VoteResp {
                     status: None,
                     payload: RequestVoteResponse {
@@ -108,6 +124,7 @@ impl<'a, T: ClientData, R: Tracker<Entity=T>> Candidate<'a, T, R> {
 
         if response.vote_granted {
             self.number_of_votes += 1;
+            info!("A vote granted no {}", self.number_of_votes);
             if self.has_enough_vote() {
                 self.raft.set_state(State::Leader);
             }
