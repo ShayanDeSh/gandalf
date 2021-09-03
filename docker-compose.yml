@@ -1,0 +1,79 @@
+---
+
+version: "3.9"
+
+services:
+    node1:
+        container_name: gandolf_1
+        image: gandolf:latest
+        restart: always
+        environment:
+            - RUST_LOG=info
+        volumes:
+            - ./gandolf_1.conf:/etc/gandolf.conf
+        networks:
+            vpcbr:
+                ipv4_address: 10.5.0.2
+        depends_on:
+            - kvs1
+
+    node2:
+        container_name: gandolf_2
+        image: gandolf:latest
+        restart: always
+        environment:
+            - RUST_LOG=info
+        volumes:
+            - ./gandolf_2.conf:/etc/gandolf.conf
+        networks:
+            vpcbr:
+                ipv4_address: 10.5.0.3
+        depends_on:
+            - kvs2
+
+    node3:
+        container_name: gandolf_3
+        image: gandolf:latest
+        restart: always
+        environment:
+            - RUST_LOG=info
+        volumes:
+            - ./gandolf_3.conf:/etc/gandolf.conf
+        networks:
+            vpcbr:
+                ipv4_address: 10.5.0.4
+        depends_on:
+            - kvs3
+
+    kvs1:
+        container_name: kvs_1
+        image: gandolf-kvs:latest
+        restart: always
+        networks:
+            vpcbr:
+                ipv4_address: 10.5.0.5
+
+    kvs2:
+        container_name: kvs_2
+        image: gandolf-kvs:latest
+        restart: always
+        networks:
+            vpcbr:
+                ipv4_address: 10.5.0.6
+
+    kvs3:
+        container_name: kvs_3
+        image: gandolf-kvs:latest
+        restart: always
+        networks:
+            vpcbr:
+                ipv4_address: 10.5.0.7
+
+
+networks:
+    vpcbr:
+        driver: bridge
+        ipam:
+            config:
+                - subnet: 10.5.0.0/24
+
