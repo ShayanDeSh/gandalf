@@ -59,13 +59,14 @@ impl Tracker for KvsTracker {
     }
 
     fn get_log_term(&self, index: Index) -> Term {
+        if index == 0 {
+            return 0;
+        }
         self.log[index as usize].0
     }
 
     fn append_log(&mut self, entity: Self::Entity, term: Term) -> crate::Result<Index> {
-        if term > self.last_log_term {
-            self.last_log_term = term;
-        }
+        self.last_log_term = term;
         self.log.push(Cell(term, entity));
         self.last_log_index += 1;
         Ok(self.last_log_index)
