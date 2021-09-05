@@ -102,6 +102,7 @@ impl<'a, T: ClientData, R: Tracker<Entity=T>> Leader<'a, T, R> {
                 info!("Recived A client read message.");
                 let tracker = self.raft.tracker.read().await;
                 let response = tracker.propagate(&body).await?;
+                info!("Recived Response {:?}", response);
                 if let Err(_) = tx.send(RaftMessage::ClientResp { body: response }) {
                     error!("Peer drop the client response");
                 }

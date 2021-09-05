@@ -136,10 +136,13 @@ impl<P: Parser<T>, T: ClientData> Handler<P, T> {
 
                 let resp = rx.await?;
 
+                info!("Sending response back to client {:?}", resp);
+
                 match resp {
                     RaftMessage::ClientResp{body} =>  {
                         let buf = self.parser.unparse(body);
                         self.stream.write_all(&buf).await?;
+                        self.stream.flush().await?;
                     },
                     _ => {return Err("Unkown response recived".into());}
                 }
