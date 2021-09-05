@@ -99,22 +99,23 @@ impl<'a, T: ClientData, R: Tracker<Entity=T>> Leader<'a, T, R> {
     async fn handle_api_request(&mut self, request: RaftMessage<T>) -> crate::Result<()> {
        match request {
             RaftMessage::ClientReadMsg {body, tx} => {
-                info!("Recived A client read message.");
+                info!("Received A client read message.");
                 let tracker = self.raft.tracker.read().await;
                 let response = tracker.propagate(&body).await?;
-                info!("Recived Response {:?}", response);
+                info!("Received Response {:?}", response);
                 if let Err(_) = tx.send(RaftMessage::ClientResp { body: response }) {
                     error!("Peer drop the client response");
                 }
             },
             RaftMessage::ClientWriteMsg {body, tx} => {
-                info!("Recived A client write message.");
+                info!("Received A client write message.");
                 let mut tracker = self.raft.tracker.write().await;
                 let index = tracker.append_log(body, self.raft.last_log_term)?;
                 self.raft.last_log_index = index;
                 self.commit_queue.insert(index, tx);
                 let repl_req = ReplicatorMsg::ReplicateReq{index};
                 for replicator in &self.replicators {
+                    info!("Sending to {:?}", replicator);
                     let _ = replicator.send(repl_req.clone());
                 }
             },
@@ -146,19 +147,21 @@ impl<'a, T: ClientData, R: Tracker<Entity=T>> Leader<'a, T, R> {
 
     #[instrument(level="info", skip(self))]
     async fn check_for_commit(&mut self, index: u64) -> crate::Result<()> {
+        info!("Checking possible commit.");
         if self.raft.commit_index < index {
             let number = self.raft.nodes_state.values()
                 .into_iter()
                 .fold(0, |acc, s| if s.match_index >= index {acc + 1} else {acc});
+            info!("matched number is {}", number);
 
             let mut tracker = self.raft.tracker.write().await;
 
-            if number > self.raft.nodes.len() {
+            if number > self.raft.nodes.len() / 2 {
                 for i in self.raft.commit_index..index {
                     info!("Commiting index {}.", i);
                     let frame = tracker.commit(i).await?;
-                    self.raft.commit_index = i;
-                    if let Some(tx) = self.commit_queue.remove(&i) {
+                    self.raft.commit_index = i + 1;
+                    if let Some(tx) = self.commit_queue.remove(&(i + 1)) {
                         let _ = tx.send(RaftMessage::ClientResp{ body: frame });
                     }
                 }
@@ -214,7 +217,7 @@ impl<T: ClientData, R: Tracker<Entity=T>> Replicator<T, R> {
         };
         drop(tracker);
         let node = self.get_node();
-        info!("beating for {} with {:?}", node.id, request);
+//        info!("beating for {} with {:?}", node.id, request);
         let response = rpc::append_entries(&node, request).await?;
         if !response.success {
             self.state = ReplicationState::Lagged;
@@ -373,7 +376,7 @@ impl<'a, T: ClientData, R: Tracker<Entity=T>> UpToDate<'a, T, R> {
                     let _ = self.replicator.beat().await;
                 },
                 Some(msg) = self.replicator.rx_repl.recv() => { 
-                    let _ = self.handle_replication_msg(msg);
+                    let _ = self.handle_replication_msg(msg).await;
                 }
             }
         }

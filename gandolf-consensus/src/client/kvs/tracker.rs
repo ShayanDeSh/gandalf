@@ -55,14 +55,15 @@ impl Tracker for KvsTracker {
     } 
 
     fn get_log_entity(&self, index: Index) -> &Self::Entity {
-        &self.log[index as usize].1
+        let i = index - 1;
+        &self.log[i as usize].1
     }
 
     fn get_log_term(&self, index: Index) -> Term {
-        if index == 0 {
+        if (index - 1) as i64 == -1 {
             return 0;
         }
-        self.log[index as usize].0
+        self.log[(index - 1) as usize].0
     }
 
     fn append_log(&mut self, entity: Self::Entity, term: Term) -> crate::Result<Index> {
@@ -80,7 +81,7 @@ impl Tracker for KvsTracker {
     }
 
     async fn commit(&mut self, index: Index) -> crate::Result<Self::Entity> {
-        if index != self.last_commited_index + 1 {
+        if index + 1 != self.last_commited_index + 1 {
             return Err("Wrong commit index".into());
         }
 
