@@ -127,7 +127,7 @@ fn peek_u8(cursor: &mut Cursor<&[u8]>) -> Result<u8, Error> {
     if !cursor.has_remaining() {
         return Err(Error::Incomplete);
     }
-    Ok(cursor.get_ref()[0])
+    Ok(cursor.chunk()[0])
 }
 
 
