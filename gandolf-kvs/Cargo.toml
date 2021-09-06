@@ -12,6 +12,10 @@ A key value stroe used in gandolf consensus system
 name = "gandolf-kvs-server"
 path = "src/bin/server.rs"
 
+[[bin]]
+name = "gandolf-kvs"
+path = "src/bin/cli.rs"
+
 [dependencies]
 tokio = { version = "1", features = ["full"] }
 structopt = "0.3.22"
