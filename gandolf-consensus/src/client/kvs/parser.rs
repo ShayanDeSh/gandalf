@@ -6,13 +6,15 @@ use gandolf_kvs::Command;
 
 use crate::parser::{Parser, Kind};
 
+use std::io::Write;
+
 #[derive(Clone, Debug)]
 pub struct KvsParser;
 
 impl crate::ClientData for Frame {}
 
 impl KvsParser {
-    fn write_value(&self, buf: &mut BytesMut, frame: Frame) {
+    fn write_value(&self, buf: &mut BytesMut, frame: Frame) -> crate::Result<()> {
         match frame {
             Frame::Simple(val) => {
                 buf.put_u8(b'+');
@@ -26,7 +28,13 @@ impl KvsParser {
             }
             Frame::Integer(val) => {
                 buf.put_u8(b':');
-                buf.put_u64(val);
+                let mut buff = [0u8; 20];
+                let mut buff = Cursor::new(&mut buff[..]);
+
+                write!(&mut buff, "{}", val)?;
+                let pos = buff.position() as usize;
+
+                buf.put(&buff.get_ref()[..pos]);
             }
             Frame::Null => {
                 buf.put(&b"$-1\r\n"[..]);
@@ -35,13 +43,24 @@ impl KvsParser {
                 let len = val.len();
 
                 buf.put_u8(b'$');
-                buf.put_u64(len as u64);
+
+                let mut buff = [0u8; 20];
+                let mut buff = Cursor::new(&mut buff[..]);
+
+                write!(&mut buff, "{}", len as u64)?;
+                let pos = buff.position() as usize;
+
+                buf.put(&buff.get_ref()[..pos]);
+                buf.put(&b"\r\n"[..]);
+
                 buf.put(val);
                 buf.put(&b"\r\n"[..]);
             }
             Frame::Array(_val) => unreachable!(),
         }
+        Ok(())
     }
+
 }
 
 impl Parser<Frame> for KvsParser {
@@ -69,7 +88,7 @@ impl Parser<Frame> for KvsParser {
         }
     }
 
-    fn unparse(&self, data: Frame) -> Bytes { 
+    fn unparse(&self, data: Frame) -> crate::Result<Bytes> { 
 
         let mut buf = BytesMut::with_capacity(1024);
         match data {
@@ -80,10 +99,10 @@ impl Parser<Frame> for KvsParser {
                     self.write_value(&mut buf, entity);
                 }
             }
-            _ => self.write_value(&mut buf, data)
+            _ => self.write_value(&mut buf, data)?
         }
 
-        return buf.freeze();
+        return Ok(buf.freeze());
     }
 }
 

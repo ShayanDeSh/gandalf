@@ -140,7 +140,7 @@ impl<P: Parser<T>, T: ClientData> Handler<P, T> {
 
                 match resp {
                     RaftMessage::ClientResp{body} =>  {
-                        let buf = self.parser.unparse(body);
+                        let buf = self.parser.unparse(body)?;
                         self.stream.write_all(&buf).await?;
                         self.stream.flush().await?;
                     },
