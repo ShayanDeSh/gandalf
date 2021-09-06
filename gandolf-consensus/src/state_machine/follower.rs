@@ -108,10 +108,28 @@ impl<'a, T: ClientData, R: Tracker<Entity=T>> Follower<'a, T, R> {
         }
     }
 
+    async fn check_for_commit(&mut self, index: u64, leader_commit: u64) -> crate::Result<()> {
+        let mut tracker = self.raft.tracker.write().await;
+        if leader_commit > self.raft.commit_index {
+            for i in self.raft.commit_index..std::cmp::min(leader_commit, index) {
+                info!("Recived an append entry: Comiting");
+                match tracker.commit(i).await {
+                    Ok(_) => {
+                        self.raft.commit_index = i + 1;
+                    },
+                    Err(err) => {
+                        return Err(err);
+                    }
+                };
+            }
+        }
+        Ok(())
+    }
+
     #[instrument(level="info", skip(self))]
     async fn handle_append_entry(&mut self, body: AppendEntriesRequest) -> RaftMessage<T> {
-        info!("Recived and append entry: {:?}", body);
         if self.raft.current_term > body.term {
+            info!("Recived an append entry: False Response");
             return RaftMessage::AppendResp {
                 status: None,
                 payload: Some(AppendEntriesResponse {
@@ -121,6 +139,8 @@ impl<'a, T: ClientData, R: Tracker<Entity=T>> Follower<'a, T, R> {
             };
         }
         if self.raft.last_log_term != body.prev_log_term || self.raft.last_log_index != body.prev_log_index {
+            info!("Recived an append entry: False Response, last_log_term = {}, last_log_index = {}",
+                self.raft.last_log_term, self.raft.last_log_index);
             return RaftMessage::AppendResp {
                 status: None,
                 payload: Some(AppendEntriesResponse {
@@ -130,6 +150,18 @@ impl<'a, T: ClientData, R: Tracker<Entity=T>> Follower<'a, T, R> {
             };
         }
         if body.entries.len() == 0 {
+            match self.check_for_commit(self.raft.last_log_index, body.leader_commit).await {
+                Ok(_) => {
+                },
+                Err(err) => {
+                    error!(cause = %err, "Caused an error: ");
+                    return RaftMessage::AppendResp {
+                        status: Some(tonic::Status::cancelled("Coud not append to log")),
+                        payload: None 
+                    }
+                }
+            };
+
             return RaftMessage::AppendResp {
                 status: None,
                 payload: Some(AppendEntriesResponse {
@@ -151,7 +183,10 @@ impl<'a, T: ClientData, R: Tracker<Entity=T>> Follower<'a, T, R> {
         };
         let mut tracker = self.raft.tracker.write().await;
         let last_log_index = match tracker.append_log(entity, body.term) {
-            Ok(index) => index,
+            Ok(index) => {
+                info!("Recived an append entry: Appending to log");
+                index
+            },
             Err(err) => {
                 error!(cause = %err, "Caused an error: ");
                 return RaftMessage::AppendResp {
@@ -160,21 +195,20 @@ impl<'a, T: ClientData, R: Tracker<Entity=T>> Follower<'a, T, R> {
                 }
             }
         };
-        if body.leader_commit > last_log_index {
-            for i in self.raft.commit_index..last_log_index {
-                match tracker.commit(i).await {
-                    Ok(index) => index,
-                    Err(err) => {
-                        error!(cause = %err, "Caused an error: ");
-                        return RaftMessage::AppendResp {
-                            status: Some(tonic::Status::cancelled("Coud not append to log")),
-                            payload: None 
-                        }
-                    }
-                };
-                self.raft.commit_index = i;
+        drop(tracker);
+        self.raft.last_log_index = last_log_index;
+        self.raft.last_log_term = body.term;
+        match self.check_for_commit(last_log_index, body.leader_commit).await {
+            Ok(_) => {
+            },
+            Err(err) => {
+                error!(cause = %err, "Caused an error: ");
+                return RaftMessage::AppendResp {
+                    status: Some(tonic::Status::cancelled("Coud not append to log")),
+                    payload: None 
+                }
             }
-        }
+        };
         return RaftMessage::AppendResp {
             status: None,
             payload: Some(AppendEntriesResponse {
