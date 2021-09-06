@@ -48,28 +48,7 @@ impl<'a, T: ClientData, R: Tracker<Entity=T>> Candidate<'a, T, R> {
     fn handle_api_request(&mut self, request: RaftMessage<T>) {
         match request {
             RaftMessage::VoteMsg{tx, body} => {
-                if body.term > self.raft.current_term &&
-                    (body.last_log_index >= self.raft.last_log_index && body.last_log_term >= self.raft.last_log_term) 
-                {
-                    let resp = RaftMessage::VoteResp {
-                        status: None,
-                        payload: RequestVoteResponse {
-                            term: self.raft.current_term,
-                            vote_granted: true
-                        }
-                    };
-                    let _ = tx.send(resp);
-                    self.raft.current_term = body.term;
-                    self.raft.set_state(State::Leader);
-                    return;
-                }
-                let resp = RaftMessage::VoteResp {
-                    status: None,
-                    payload: RequestVoteResponse {
-                        term: self.raft.current_term,
-                        vote_granted: false
-                    }
-                };
+                let resp = self.handle_vote_request(body);
                 let _ = tx.send(resp);
             }
             RaftMessage::AppendMsg{tx, ..} => {
@@ -81,6 +60,30 @@ impl<'a, T: ClientData, R: Tracker<Entity=T>> Candidate<'a, T, R> {
             },
             _ => unreachable!(),
         }
+    }
+
+    fn handle_vote_request(&mut self, body: RequestVoteRequest) -> RaftMessage<T> {
+        if body.term > self.raft.current_term {
+            self.raft.current_term = body.term;
+        }
+        if body.last_log_index >= self.raft.last_log_index && 
+            body.last_log_term >= self.raft.last_log_term {
+            self.raft.set_state(State::Follower);
+            return RaftMessage::VoteResp {
+                status: None,
+                payload: RequestVoteResponse {
+                    term: self.raft.current_term,
+                    vote_granted: true
+                }
+            };
+        }
+        return RaftMessage::VoteResp {
+            status: None,
+            payload: RequestVoteResponse {
+                term: self.raft.current_term,
+                vote_granted: false
+            }
+        };
     }
 
     pub fn ask_for_votes(&self) -> mpsc::Receiver<RequestVoteResponse> {
