@@ -110,8 +110,9 @@ impl<'a, T: ClientData, R: Tracker<Entity=T>> Leader<'a, T, R> {
             RaftMessage::ClientWriteMsg {body, tx} => {
                 info!("Received A client write message.");
                 let mut tracker = self.raft.tracker.write().await;
-                let index = tracker.append_log(body, self.raft.last_log_term)?;
+                let index = tracker.append_log(body, self.raft.current_term)?;
                 self.raft.last_log_index = index;
+                self.raft.last_log_term = self.raft.current_term;
                 self.commit_queue.insert(index, tx);
                 let repl_req = ReplicatorMsg::ReplicateReq{index};
                 for replicator in &self.replicators {
@@ -156,7 +157,7 @@ impl<'a, T: ClientData, R: Tracker<Entity=T>> Leader<'a, T, R> {
 
             let mut tracker = self.raft.tracker.write().await;
 
-            if number > self.raft.nodes.len() / 2 {
+            if number >= self.raft.nodes.len() / 2 {
                 for i in self.raft.commit_index..index {
                     info!("Commiting index {}.", i);
                     let frame = tracker.commit(i).await?;
