@@ -21,6 +21,7 @@ message AppendEntriesRequest {
 
 message Entry {
     string payload = 1;
+    uint64 term = 2;
 }
 
 message AppendEntriesResponse {

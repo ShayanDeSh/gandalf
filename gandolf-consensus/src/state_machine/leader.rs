@@ -232,9 +232,11 @@ impl<T: ClientData, R: Tracker<Entity=T>> Replicator<T, R> {
     pub async fn creat_append_request(&self, index: u64) -> crate::Result<AppendEntriesRequest> {
         let tracker = self.tracker.read().await;
         let entity = tracker.get_log_entity(index);
+        let term = tracker.get_log_term(index);
         let s_entity = serde_json::to_string(&entity)?; 
         let entry = Entry {
-            payload: s_entity
+            payload: s_entity,
+            term
         };
         Ok(AppendEntriesRequest {
             term: self.term,
@@ -279,11 +281,11 @@ impl<'a, T: ClientData, R: Tracker<Entity=T>> Lagged<'a, T, R> {
             "Replicator running at Lagged state."
             );
         loop {
+            info!("next_index: {}, match_index: {}", self.replicator.next_index, self.replicator.match_index);
             if self.replicator.next_index -1 == self.replicator.match_index {
                 self.replicator.state = ReplicationState::Updating;
                 break;
             }
-            info!("next_index: {}, match_index: {}", self.replicator.next_index, self.replicator.match_index);
             let tracker = self.replicator.tracker.read().await;
             let request = AppendEntriesRequest {
                 term: self.replicator.term,

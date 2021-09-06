@@ -182,7 +182,7 @@ impl<'a, T: ClientData, R: Tracker<Entity=T>> Follower<'a, T, R> {
             }
         };
         let mut tracker = self.raft.tracker.write().await;
-        let last_log_index = match tracker.append_log(entity, body.term) {
+        let last_log_index = match tracker.append_log(entity, entry.term) {
             Ok(index) => {
                 info!("Recived an append entry: Appending to log");
                 index
@@ -197,7 +197,7 @@ impl<'a, T: ClientData, R: Tracker<Entity=T>> Follower<'a, T, R> {
         };
         drop(tracker);
         self.raft.last_log_index = last_log_index;
-        self.raft.last_log_term = body.term;
+        self.raft.last_log_term = entry.term;
         match self.check_for_commit(last_log_index, body.leader_commit).await {
             Ok(_) => {
             },
