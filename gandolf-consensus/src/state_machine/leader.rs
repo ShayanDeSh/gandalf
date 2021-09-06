@@ -1,11 +1,13 @@
 use crate::{Raft, ClientData, Tracker, RaftMessage, Node, NodeID};
 use crate::raft::State;
 use tracing::{instrument, error, info};
-use tokio::time::{Instant, sleep_until, Duration};
+use tokio::time::{Instant, sleep_until, Duration, sleep};
 use tokio::sync::{mpsc, RwLock, oneshot};
 use crate::raft_rpc::{AppendEntriesRequest, Entry, AppendEntriesResponse};
 use crate::rpc;
 use std::collections::BTreeMap;
+
+use std::cmp::min;
 
 use std::sync::Arc;
 
@@ -29,7 +31,7 @@ enum ReplicatorMsg {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq, Eq)]
 enum ReplicationState {
     UpToDate,
     Lagged,
@@ -281,6 +283,7 @@ impl<'a, T: ClientData, R: Tracker<Entity=T>> Lagged<'a, T, R> {
                 self.replicator.state = ReplicationState::Updating;
                 break;
             }
+            info!("next_index: {}, match_index: {}", self.replicator.next_index, self.replicator.match_index);
             let tracker = self.replicator.tracker.read().await;
             let request = AppendEntriesRequest {
                 term: self.replicator.term,
@@ -322,12 +325,12 @@ impl<'a, T: ClientData, R: Tracker<Entity=T>> Updating<'a, T, R> {
 
     #[instrument(level="info", skip(self))]
     pub async fn run(&mut self) {
+        info!(
+            id=self.replicator.node.id.as_str(),
+            "Replicator running at Updating state."
+            );
+        let mut backoff = Duration::from_millis(1);
         loop {
-            info!(
-                id=self.replicator.node.id.as_str(),
-                "Replicator running at Updating state."
-                );
-            info!("Replicator running at Updating state.");
             let tracker = self.replicator.tracker.read().await;
             let last_log_index = tracker.get_last_log_index();
             drop(tracker);
@@ -337,9 +340,14 @@ impl<'a, T: ClientData, R: Tracker<Entity=T>> Updating<'a, T, R> {
             }
             let response = match self.replicator
                 .append_entry(self.replicator.next_index).await {
-                Ok(resp) => resp,
+                Ok(resp) => {
+                    backoff = Duration::from_millis(1);
+                    resp
+                },
                 Err(err) => {
                     error!(cause = %err, "Caused an error: ");
+                    sleep(backoff).await;
+                    backoff = min(backoff * 2, self.replicator.heartbeat);
                     continue;
                 }
             };
@@ -370,7 +378,7 @@ impl<'a, T: ClientData, R: Tracker<Entity=T>> UpToDate<'a, T, R> {
             id=self.replicator.node.id.as_str(),
             "Replicator running at UpToDate state."
             );
-        loop {
+        while self.replicator.state == ReplicationState::UpToDate {
             let timeout = sleep_until(Instant::now() + self.replicator.heartbeat);
             tokio::select! {
                 _ = timeout => { 
@@ -392,9 +400,18 @@ impl<'a, T: ClientData, R: Tracker<Entity=T>> UpToDate<'a, T, R> {
                     id=self.replicator.node.id.as_str(),
                     "Handling replication message."
                     );
-                let response = self.replicator.append_entry(index).await?;
+                let response = match self.replicator.append_entry(index).await {
+                    Ok(resp) => resp,
+                    Err(_) => {
+                        info!("Did not respond Replicator switching to Lagged");
+                        self.replicator.state = ReplicationState::Lagged;
+                        return Ok(());
+                    }
+                };
+                info!("Response is {:?}", response);
                 if !response.success {
                     self.replicator.state = ReplicationState::Lagged;
+                    return Ok(());
                 }
                 self.replicator.match_index = self.replicator.next_index;
                 self.replicator.next_index += 1;
