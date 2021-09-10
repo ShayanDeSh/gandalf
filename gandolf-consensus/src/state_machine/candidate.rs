@@ -70,6 +70,7 @@ impl<'a, T: ClientData, R: Tracker<Entity=T>> Candidate<'a, T, R> {
         if body.last_log_index >= self.raft.last_log_index && 
             body.last_log_term >= self.raft.last_log_term {
             self.raft.set_state(State::Follower);
+            self.raft.voted_for = Some(body.candidate_id);
             return RaftMessage::VoteResp {
                 status: None,
                 payload: RequestVoteResponse {
