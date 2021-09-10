@@ -23,6 +23,7 @@ impl<'a, T: ClientData, R: Tracker<Entity=T>> Candidate<'a, T, R> {
 
     pub async fn run(&mut self) -> crate::Result<()> {
         info!("Running at Candidate State");
+        info!("Current term is {}.", self.raft.current_term);
         while self.is_candidate() {
             self.raft.current_term += 1;
 

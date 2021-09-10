@@ -17,6 +17,7 @@ impl<'a, T: ClientData, R: Tracker<Entity=T>> Follower<'a, T, R> {
     #[instrument(level="info", skip(self))]
     pub async fn run(&mut self) -> crate::Result<()> {
         info!("Running at Follower State");
+        info!("Current term is {}.", self.raft.current_term);
         while self.is_follower() {
             let election_timeout = sleep_until(self.raft.generate_timeout());
 
@@ -57,7 +58,6 @@ impl<'a, T: ClientData, R: Tracker<Entity=T>> Follower<'a, T, R> {
 
     #[instrument(level="info", skip(self))]
     fn handle_vote_request(&mut self, body: RequestVoteRequest) -> RaftMessage<T> {
-        info!("Current term is {}.", self.raft.current_term);
         if self.raft.current_term > body.term {
             return RaftMessage::VoteResp {
                 payload: RequestVoteResponse {
@@ -150,6 +150,7 @@ impl<'a, T: ClientData, R: Tracker<Entity=T>> Follower<'a, T, R> {
             };
         }
         if body.entries.len() == 0 {
+            self.raft.current_term = body.term;
             match self.check_for_commit(self.raft.last_log_index, body.leader_commit).await {
                 Ok(_) => {
                 },

@@ -85,6 +85,7 @@ impl<'a, T: ClientData, R: Tracker<Entity=T>> Leader<'a, T, R> {
     #[instrument(level="info", skip(self))]
     pub async fn run(&mut self) -> crate::Result<()> {
         info!("Running at Leader State");
+        info!("Current term is {}.", self.raft.current_term);
         while self.is_leader() {
             tokio::select! {
                 Some(request) = self.raft.rx_rpc.recv() => 
@@ -280,6 +281,7 @@ impl<'a, T: ClientData, R: Tracker<Entity=T>> Lagged<'a, T, R> {
             id=self.replicator.node.id.as_str(),
             "Replicator running at Lagged state."
             );
+        let mut backoff = Duration::from_millis(1);
         loop {
             info!("next_index: {}, match_index: {}", self.replicator.next_index, self.replicator.match_index);
             if self.replicator.next_index -1 == self.replicator.match_index {
@@ -302,6 +304,8 @@ impl<'a, T: ClientData, R: Tracker<Entity=T>> Lagged<'a, T, R> {
                 Ok(resp) => resp,
                 Err(err) => {
                     error!(cause = %err, "Caused an error: ");
+                    sleep(backoff).await;
+                    backoff = min(backoff * 2, self.replicator.heartbeat);
                     continue;
                 }
             };
@@ -354,6 +358,7 @@ impl<'a, T: ClientData, R: Tracker<Entity=T>> Updating<'a, T, R> {
                 }
             };
             if !response.success {
+                self.replicator.next_index -=1;
                 self.replicator.state = ReplicationState::Lagged;
                 break;
             }
@@ -402,6 +407,9 @@ impl<'a, T: ClientData, R: Tracker<Entity=T>> UpToDate<'a, T, R> {
                     id=self.replicator.node.id.as_str(),
                     "Handling replication message."
                     );
+                if self.replicator.match_index >= index {
+                    return Ok(());
+                }
                 let response = match self.replicator.append_entry(index).await {
                     Ok(resp) => resp,
                     Err(_) => {
