@@ -144,6 +144,11 @@ impl<P: Parser<T>, T: ClientData> Handler<P, T> {
                         self.stream.write_all(&buf).await?;
                         self.stream.flush().await?;
                     },
+                    RaftMessage::ClientError { body } => {
+                        let buf = self.parser.into_error(&body)?;
+                        self.stream.write_all(&buf).await?;
+                        self.stream.flush().await?;
+                    }
                     _ => {return Err("Unkown response recived".into());}
                 }
             }
