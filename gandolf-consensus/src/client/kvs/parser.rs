@@ -96,7 +96,7 @@ impl Parser<Frame> for KvsParser {
                 buf.put_u8(b'*');
                 buf.put_u64(val.len() as u64);
                 for entity in val {
-                    self.write_value(&mut buf, entity);
+                    self.write_value(&mut buf, entity)?;
                 }
             }
             _ => self.write_value(&mut buf, data)?
@@ -104,5 +104,8 @@ impl Parser<Frame> for KvsParser {
 
         return Ok(buf.freeze());
     }
-}
 
+    fn into_error(&self, data: &str) -> crate::Result<Bytes> {
+        self.unparse(Frame::Error(data.to_string()))
+    }
+}
