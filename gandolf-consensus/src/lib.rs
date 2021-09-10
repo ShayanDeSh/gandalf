@@ -76,6 +76,9 @@ pub enum RaftMessage<T: ClientData> {
     },
     ClientResp {
         body: T
+    },
+    ClientError {
+        body: String
     }
 }
 
