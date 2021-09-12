@@ -44,20 +44,32 @@ impl KvsParser {
 
                 buf.put_u8(b'$');
 
-                let mut buff = [0u8; 20];
-                let mut buff = Cursor::new(&mut buff[..]);
-
-                write!(&mut buff, "{}", len as u64)?;
-                let pos = buff.position() as usize;
-
-                buf.put(&buff.get_ref()[..pos]);
-                buf.put(&b"\r\n"[..]);
+                self.write_decimal(buf, len as u64)?;
 
                 buf.put(val);
                 buf.put(&b"\r\n"[..]);
             }
-            Frame::Array(_val) => unreachable!(),
+            Frame::Array(val) => {
+                buf.put_u8(b'*');
+                self.write_decimal(buf, val.len() as u64)?;
+                for entity in val {
+                    self.write_value(buf, entity)?;
+                }
+            },
         }
+        Ok(())
+    }
+
+    fn write_decimal(&self, buf: &mut BytesMut, value: u64) -> crate::Result<()> {
+        let mut buff = [0u8; 20];
+        let mut buff = Cursor::new(&mut buff[..]);
+
+        write!(&mut buff, "{}", value)?;
+        let pos = buff.position() as usize;
+
+        buf.put(&buff.get_ref()[..pos]);
+        buf.put(&b"\r\n"[..]);
+
         Ok(())
     }
 
@@ -77,7 +89,9 @@ impl Parser<Frame> for KvsParser {
 
                 match Command::from_frame(frame.clone())? {
                     Command::Get(_) => return Ok(Some(Kind::Read(frame))),
-                    Command::Set(_) => return Ok(Some(Kind::Write(frame)))
+                    Command::Snap(_) => return Ok(Some(Kind::Read(frame))),
+                    Command::Set(_) => return Ok(Some(Kind::Write(frame))),
+                    Command::Load(_) => return Ok(Some(Kind::Write(frame))),
                 }
 
             }
@@ -94,7 +108,7 @@ impl Parser<Frame> for KvsParser {
         match data {
             Frame::Array(val) => {
                 buf.put_u8(b'*');
-                buf.put_u64(val.len() as u64);
+                self.write_decimal(&mut buf, val.len() as u64)?;
                 for entity in val {
                     self.write_value(&mut buf, entity)?;
                 }
