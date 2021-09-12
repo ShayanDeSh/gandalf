@@ -2,8 +2,9 @@ use bytes::{Buf, BytesMut};
 
 use tokio::net::TcpStream;
 use tokio::io::{AsyncReadExt, AsyncWriteExt, BufWriter};
+use async_recursion::async_recursion;
 
-use tracing::{debug};
+use tracing::debug;
 
 use std::io::{self, Cursor};
 
@@ -80,7 +81,9 @@ impl Connection {
         self.stream.flush().await
     }
 
-    async fn write_value(&mut self, frame: &Frame) -> io::Result<()> {
+
+    #[async_recursion]
+    async fn write_value(&'async_recursion mut self, frame: &Frame) -> io::Result<()> {
         match frame {
             Frame::Simple(val) => {
                 self.stream.write_u8(b'+').await?;
@@ -107,7 +110,13 @@ impl Connection {
                 self.stream.write_all(val).await?;
                 self.stream.write_all(b"\r\n").await?;
             }
-            Frame::Array(_val) => unreachable!(),
+            Frame::Array(val) => {
+                self.stream.write_u8(b'*').await?;
+                self.write_decimal(val.len() as u64).await?;
+                for entity in &*val {
+                    self.write_value(entity).await?;
+                }
+            },
         }
         Ok(())
     }
