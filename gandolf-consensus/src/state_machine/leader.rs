@@ -364,6 +364,12 @@ impl<'a, T: ClientData, R: Tracker<Entity=T>> Updating<'a, T, R> {
             }
             self.replicator.match_index = self.replicator.next_index;
             self.replicator.next_index += 1;
+
+            let _ = self.replicator.tx_repl.send(ReplicatorMsg::ReplicateResp {
+                match_index: self.replicator.match_index,
+                next_index: self.replicator.next_index,
+                id: self.replicator.node.id.clone()
+            });
         }
     }
 }
