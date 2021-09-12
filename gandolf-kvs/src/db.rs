@@ -25,12 +25,11 @@ pub struct State {
     kv: HashMap<String, Entity>,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Entity {
     id: Uuid,
-    data: Bytes,
+    pub data: Bytes,
 }
-
 
 impl DbGuard {
     pub fn new() -> DbGuard {
@@ -73,6 +72,11 @@ impl Db {
     pub fn get(&self, key: &str) -> Option<Bytes> {
         let state = self.shared.state.lock().unwrap();
         state.kv.get(key).map(|entity| entity.data.clone())
+    }
+
+    pub fn snap(&self) -> HashMap<String, Entity> {
+        let state = self.shared.state.lock().unwrap();
+        state.kv.clone()
     }
 
 }

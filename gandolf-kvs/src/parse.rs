@@ -64,6 +64,19 @@ impl Parse {
         }
     }
 
+    pub fn next_array(&mut self) -> Result<Parse, ParseError> {
+        let frame = self.next()?;
+        let array = match frame {
+            Frame::Array(array) => array,
+            frame => return Err(format!("Wrong frame format,\
+                    only can accept arrays but recived {:?}", frame).
+                into()),
+        };
+        Ok(Parse {
+            parts: array.into_iter()
+        })
+    }
+
     pub fn finish(&mut self) -> Result<(), ParseError> {
         if self.parts.next().is_none() {
             Ok(())
