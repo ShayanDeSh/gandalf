@@ -6,24 +6,36 @@ use crate::tracker::{Index, Term};
 use tokio::net::TcpStream;
 use std::net::SocketAddr;
 
+use std::fs::OpenOptions;
+
+use tracing::info;
+
 pub struct Cell(Term, Frame);
 
 pub struct KvsTracker {
     log: Vec<Cell>,
     last_log_index: Index,
+    snapshot_no: u64,
+    snapshot_offset: u64,
     last_log_term: Term,
     last_commited_index: Index,
-    addr: SocketAddr
+    addr: SocketAddr,
+    snapshot_path: String,
+    last_snapshot_term: Term,
 }
 
 impl KvsTracker {
-    pub fn new(addr: SocketAddr) -> KvsTracker {
+    pub fn new(addr: SocketAddr, snapshot_path: String, snapshot_offset: u64) -> KvsTracker {
         KvsTracker {
             log: Vec::new(),
             last_log_index: 0,
             last_log_term: 0,
             last_commited_index: 0,
-            addr
+            snapshot_no: 0,
+            snapshot_offset,
+            addr,
+            snapshot_path,
+            last_snapshot_term: 0,
         }
     }
 }
@@ -55,15 +67,17 @@ impl Tracker for KvsTracker {
     } 
 
     fn get_log_entity(&self, index: Index) -> &Self::Entity {
-        let i = index - 1;
+        let i = index - 1 - (self.snapshot_no as u64 * self.snapshot_offset as u64);
         &self.log[i as usize].1
     }
 
     fn get_log_term(&self, index: Index) -> Term {
-        if (index - 1) as i64 == -1 {
-            return 0;
+        let i = index - 1 - (self.snapshot_no * self.snapshot_offset);
+        if i as i64 == -1 {
+            return self.last_snapshot_term;
         }
-        self.log[(index - 1) as usize].0
+        info!("index is {}", i as i64);
+        self.log[i as usize].0
     }
 
     fn append_log(&mut self, entity: Self::Entity, term: Term) -> crate::Result<Index> {
@@ -76,6 +90,58 @@ impl Tracker for KvsTracker {
     fn delete_last_log(&mut self) -> crate::Result<()> {
         if let None = self.log.pop() {
             return Err("The log is empty".into());
+        }
+        Ok(())
+    }
+
+    async fn take_snapshot(&mut self) -> crate::Result<()> {
+        let socket = TcpStream::connect(self.addr).await?;
+        let mut connection = Connection::new(socket);
+        let snap = Frame::Array(vec![Frame::Simple("snap".to_string())]);
+        connection.write_frame(&snap).await?;
+
+        let response = read_response(&mut connection).await?;
+
+        match response {
+            frame => {
+                let file = OpenOptions::new()
+                    .create(true)
+                    .write(true)
+                    .truncate(true)
+                    .open(format!("{}/{}.ga", self.snapshot_path, self.snapshot_no))?;
+                serde_json::to_writer(file, &frame)?;
+            }
+        }
+
+        self.snapshot_no += 1;
+        self.last_snapshot_term = self.get_last_log_term();
+        self.log.clear();
+
+        Ok(())
+    }
+
+    async fn load_snappshot(&mut self, entity: &Self::Entity, len: u64, last_log_term: Term) -> crate::Result<()> {
+        let socket = TcpStream::connect(self.addr).await?;
+        let mut connection = Connection::new(socket);
+        connection.write_frame(entity).await?;
+
+        let response = read_response(&mut connection).await?;
+
+        match response {
+            Frame::Simple(_) => {
+                let file = OpenOptions::new()
+                    .create(true)
+                    .write(true)
+                    .truncate(true)
+                    .open(format!("{}.ga", self.snapshot_no))?;
+                serde_json::to_writer(file, entity)?;
+                self.snapshot_no += 1;
+                self.last_log_index = self.snapshot_no * len;
+                self.last_log_term = last_log_term;
+                self.last_snapshot_term = last_log_term;
+                self.log.clear();
+            },
+            _ => unreachable!()
         }
         Ok(())
     }
