@@ -67,7 +67,7 @@ impl<'a, T: ClientData, R: Tracker<Entity=T>> Leader<'a, T, R> {
             } else {
                 0
             };
-            let mut replicator = Replicator::new(node, raft.last_log_index + 1,
+            let mut replicator = Replicator::new(node, raft.last_index() + 1,
                 match_index, raft.current_term, raft.tracker.clone(), raft.id.clone(),
                 rx_repl, tx_repl.clone(), raft.heartbeat);
 
@@ -92,6 +92,9 @@ impl<'a, T: ClientData, R: Tracker<Entity=T>> Leader<'a, T, R> {
                     self.handle_api_request(request).await?,
                 Some(request) = self.rx_repl.recv() =>  {
                     self.handle_replicator_resp(request).await?
+                },
+                Some(_) = self.raft.rx_snap.recv() => {
+                    self.raft.take_snapshot().await?
                 }
             }
         }
@@ -114,8 +117,8 @@ impl<'a, T: ClientData, R: Tracker<Entity=T>> Leader<'a, T, R> {
                 info!("Received A client write message.");
                 let mut tracker = self.raft.tracker.write().await;
                 let index = tracker.append_log(body, self.raft.current_term)?;
-                self.raft.last_log_index = index;
-                self.raft.last_log_term = self.raft.current_term;
+                drop(tracker);
+                self.raft.update_last_log(index, self.raft.current_term);
                 self.commit_queue.insert(index, tx);
                 let repl_req = ReplicatorMsg::ReplicateReq{index};
                 for replicator in &self.replicators {
@@ -152,19 +155,20 @@ impl<'a, T: ClientData, R: Tracker<Entity=T>> Leader<'a, T, R> {
     #[instrument(level="info", skip(self))]
     async fn check_for_commit(&mut self, index: u64) -> crate::Result<()> {
         info!("Checking possible commit.");
-        if self.raft.commit_index < index {
+        if self.raft.get_commit_index() < index {
             let number = self.raft.nodes_state.values()
                 .into_iter()
                 .fold(0, |acc, s| if s.match_index >= index {acc + 1} else {acc});
             info!("matched number is {}", number);
 
-            let mut tracker = self.raft.tracker.write().await;
 
             if number >= self.raft.nodes.len() / 2 {
-                for i in self.raft.commit_index..index {
+                for i in self.raft.get_commit_index()..index {
                     info!("Commiting index {}.", i);
+                    let mut tracker = self.raft.tracker.write().await;
                     let frame = tracker.commit(i).await?;
-                    self.raft.commit_index = i + 1;
+                    drop(tracker);
+                    self.raft.update_commit_index(i + 1);
                     if let Some(tx) = self.commit_queue.remove(&(i + 1)) {
                         let _ = tx.send(RaftMessage::ClientResp{ body: frame });
                     }

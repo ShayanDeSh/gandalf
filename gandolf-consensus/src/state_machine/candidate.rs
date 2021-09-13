@@ -67,8 +67,8 @@ impl<'a, T: ClientData, R: Tracker<Entity=T>> Candidate<'a, T, R> {
         if body.term > self.raft.current_term {
             self.raft.current_term = body.term;
         }
-        if body.last_log_index >= self.raft.last_log_index && 
-            body.last_log_term >= self.raft.last_log_term {
+        if body.last_log_index >= self.raft.last_index() && 
+            body.last_log_term >= self.raft.last_term() {
             self.raft.set_state(State::Follower);
             self.raft.voted_for = Some(body.candidate_id);
             return RaftMessage::VoteResp {
@@ -100,8 +100,8 @@ impl<'a, T: ClientData, R: Tracker<Entity=T>> Candidate<'a, T, R> {
             let request = RequestVoteRequest {
                 term: self.raft.current_term,
                 candidate_id: self.raft.id.to_string(),
-                last_log_index: self.raft.last_log_index,
-                last_log_term: self.raft.last_log_term
+                last_log_index: self.raft.last_index(),
+                last_log_term: self.raft.last_term()
             };
             let _ = tokio::spawn(
                 async move {

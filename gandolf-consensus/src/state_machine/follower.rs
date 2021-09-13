@@ -34,6 +34,9 @@ impl<'a, T: ClientData, R: Tracker<Entity=T>> Follower<'a, T, R> {
                         Err(err) => error!(cause = %err, "Caused an error: ")
                     }
                 },
+                Some(_) = self.raft.rx_snap.recv() => {
+                    self.raft.take_snapshot().await?
+                }
             }
         }
 
@@ -102,7 +105,7 @@ impl<'a, T: ClientData, R: Tracker<Entity=T>> Follower<'a, T, R> {
             }
         }
         self.raft.current_term = body.term;
-        if (self.raft.last_log_term > body.last_log_term) || (self.raft.last_log_index > body.last_log_index) {
+        if (self.raft.last_term() > body.last_log_term) || (self.raft.last_index() > body.last_log_index) {
             return RaftMessage::VoteResp {
                 payload: RequestVoteResponse {
                     term: self.raft.current_term,
@@ -143,13 +146,15 @@ impl<'a, T: ClientData, R: Tracker<Entity=T>> Follower<'a, T, R> {
     }
 
     async fn check_for_commit(&mut self, index: u64, leader_commit: u64) -> crate::Result<()> {
-        let mut tracker = self.raft.tracker.write().await;
-        if leader_commit > self.raft.commit_index {
-            for i in self.raft.commit_index..std::cmp::min(leader_commit, index) {
+        if leader_commit > self.raft.get_commit_index() {
+            for i in self.raft.get_commit_index()..std::cmp::min(leader_commit, index) {
                 info!("Recived an append entry: Comiting");
-                match tracker.commit(i).await {
+                let mut tracker = self.raft.tracker.write().await;
+                let frame = tracker.commit(i).await;
+                drop(tracker);
+                match frame {
                     Ok(_) => {
-                        self.raft.commit_index = i + 1;
+                        self.raft.update_commit_index(i + 1);
                     },
                     Err(err) => {
                         return Err(err);
@@ -172,9 +177,9 @@ impl<'a, T: ClientData, R: Tracker<Entity=T>> Follower<'a, T, R> {
                 })
             };
         }
-        if self.raft.last_log_term != body.prev_log_term || self.raft.last_log_index != body.prev_log_index {
+        if self.raft.last_term() != body.prev_log_term || self.raft.last_index() != body.prev_log_index {
             info!("Recived an append entry: False Response, last_log_term = {}, last_log_index = {}",
-                self.raft.last_log_term, self.raft.last_log_index);
+                self.raft.last_term(), self.raft.last_index());
             return RaftMessage::AppendResp {
                 status: None,
                 payload: Some(AppendEntriesResponse {
@@ -186,7 +191,7 @@ impl<'a, T: ClientData, R: Tracker<Entity=T>> Follower<'a, T, R> {
         self.raft.current_leader = Some(body.leader_id);
         if body.entries.len() == 0 {
             self.raft.current_term = body.term;
-            match self.check_for_commit(self.raft.last_log_index, body.leader_commit).await {
+            match self.check_for_commit(self.raft.last_index(), body.leader_commit).await {
                 Ok(_) => {
                 },
                 Err(err) => {
@@ -232,8 +237,7 @@ impl<'a, T: ClientData, R: Tracker<Entity=T>> Follower<'a, T, R> {
             }
         };
         drop(tracker);
-        self.raft.last_log_index = last_log_index;
-        self.raft.last_log_term = entry.term;
+        self.raft.update_last_log(last_log_index, entry.term);
         match self.check_for_commit(last_log_index, body.leader_commit).await {
             Ok(_) => {
             },
