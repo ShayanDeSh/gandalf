@@ -1,5 +1,5 @@
 use std::collections::{HashSet, BTreeMap};
-use std::sync::{Arc};
+use std::sync::Arc;
 
 use rand::{thread_rng, Rng};
 
@@ -26,23 +26,27 @@ pub struct Raft<T: ClientData, R: Tracker<Entity=T>> {
     pub id: NodeID,
     pub state: State,
     pub current_term: u64,
-    pub commit_index: u64,
+    commit_index: u64,
     pub last_applied: u64,
-    pub last_log_index: u64,
-    pub last_log_term: u64,
+    last_log_index: u64,
+    last_log_term: u64,
     pub voted_for: Option<NodeID>,
     pub current_leader: Option<NodeID>,
     pub nodes: HashSet<Node>,
     pub nodes_state: BTreeMap<NodeID, NodeState>,
     pub rx_rpc: mpsc::UnboundedReceiver<RaftMessage<T>>,
+    pub rx_snap: mpsc::UnboundedReceiver<RaftMessage<T>>,
+    pub tx_snap: mpsc::UnboundedSender<RaftMessage<T>>,
     pub election_timeout: u64,
     pub heartbeat: Duration,
+    pub snapshot_offset: u64,
     pub tracker: Arc<RwLock<R>>
 }
 
 impl<T: ClientData, R: Tracker<Entity=T>> Raft<T, R> {
     pub fn new(config: ConfigMap, rx_rpc: mpsc::UnboundedReceiver<RaftMessage<T>>,
         tracker: Arc<RwLock<R>>, id: String) -> Raft<T, R> {
+        let (tx_snap, rx_snap) = mpsc::unbounded_channel();
         Raft {
             id,
             state: State::Follower,
@@ -56,8 +60,11 @@ impl<T: ClientData, R: Tracker<Entity=T>> Raft<T, R> {
             nodes: config.nodes,
             nodes_state: config.nodes_state,
             rx_rpc,
+            rx_snap,
+            tx_snap,
             election_timeout: config.timeout,
             heartbeat: Duration::from_millis(config.heartbeat),
+            snapshot_offset: config.snapshot_offset,
             tracker
         }
     }
@@ -98,4 +105,33 @@ impl<T: ClientData, R: Tracker<Entity=T>> Raft<T, R> {
         self.nodes.clone()
     }
 
+    pub fn update_last_log(&mut self, index: u64, term: u64) {
+        self.last_log_index = index;
+        self.last_log_term = term; 
+    }
+
+    pub fn update_commit_index(&mut self, index: u64) {
+        self.commit_index = index;
+        if index % self.snapshot_offset == 0 {
+            let _ = self.tx_snap.send(RaftMessage::SnapMsg);
+        }
+    }
+
+    pub async fn take_snapshot(&self) -> crate::Result<()> {
+        let mut tracker = self.tracker.write().await;
+        tracker.take_snapshot().await?;
+        Ok(())
+    }
+
+    pub fn last_index(&self) -> u64 {
+        self.last_log_index
+    }
+
+    pub fn last_term(&self) -> u64 {
+        self.last_log_term
+    }
+
+    pub fn get_commit_index(&self) -> u64 {
+        self.commit_index
+    }
 }
