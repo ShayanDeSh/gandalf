@@ -35,11 +35,11 @@ pub async fn main() -> Result<(), gandolf_consensus::Error> {
     let nodes = cli.nodes.ok_or("You must pass list of nodes")?;
 
     let config = ConfigMap::new(cli.host, cli.port, nodes, cli.heartbeat,
-        cli.timeout, cli.connection_host, cli.connection_port)?;
+        cli.timeout, cli.connection_host, cli.connection_port, cli.snapshot_offset)?;
 
     let address = format!("{}:{}", cli.client_host, cli.client_port).parse()?;
 
-    let tracker = KvsTracker::new(address);
+    let tracker = KvsTracker::new(address, cli.snapshot_path, cli.snapshot_offset);
 
     server::run(signal::ctrl_c(), config, KvsParser, tracker).await?;
 
@@ -62,6 +62,9 @@ struct Cli {
     #[structopt(name = "heartbeat", long = "--heart", default_value = HEARTBEAT)]
     heartbeat: u64,
 
+    #[structopt(name = "snapshot_offset", long = "--offset", default_value = "10")]
+    snapshot_offset: u64,
+
     #[structopt(name = "timeout", long = "--timeout", default_value = TIMEOUT)]
     timeout: u64,
 
@@ -76,6 +79,9 @@ struct Cli {
 
     #[structopt(name = "connection_host", long = "--connection_host", default_value = "127.0.0.1")]
     connection_host: String,
+
+    #[structopt(name = "snapshot_path", long = "--snap", default_value = "/tmp")]
+    snapshot_path: String,
 
     #[structopt(name = "config", long = "--config", default_value = "/etc/gandolf.conf")]
     #[serde(skip)]

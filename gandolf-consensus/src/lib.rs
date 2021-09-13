@@ -79,7 +79,8 @@ pub enum RaftMessage<T: ClientData> {
     },
     ClientError {
         body: String
-    }
+    },
+    SnapMsg
 }
 
 pub struct ConfigMap {
@@ -90,7 +91,8 @@ pub struct ConfigMap {
     nodes: HashSet<Node>,
     nodes_state: BTreeMap<NodeID, NodeState>,
     heartbeat: u64,
-    timeout: u64
+    timeout: u64,
+    snapshot_offset: u64
 }
 
 impl Node {
@@ -107,7 +109,7 @@ impl NodeState {
 
 impl ConfigMap {
     pub fn new(host: String, port: u16, nodes_raw: Vec<String>, heartbeat: u64,
-        timeout: u64, connecntion_host: String, connecntion_port: u16) 
+        timeout: u64, connecntion_host: String, connecntion_port: u16, snapshot_offset: u64) 
         -> Result<ConfigMap> {
 
         let mut nodes = HashSet::new();
@@ -129,7 +131,8 @@ impl ConfigMap {
             timeout,
             nodes_state,
             connecntion_port,
-            connecntion_host 
+            connecntion_host,
+            snapshot_offset
         })
 
     }
