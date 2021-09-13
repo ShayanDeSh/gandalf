@@ -21,5 +21,9 @@ pub trait Tracker: Sync + Send + 'static {
 
     fn delete_last_log(&mut self) -> crate::Result<()>;
 
+    async fn take_snapshot(&mut self) -> crate::Result<()>;
+
+    async fn load_snappshot(&mut self, entity: &Self::Entity, len: u64, last_log_term: Term) -> crate::Result<()>;
+
     async fn commit(&mut self, index: Index) -> crate::Result<Self::Entity>;
 }
