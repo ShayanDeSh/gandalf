@@ -80,7 +80,15 @@ pub enum RaftMessage<T: ClientData> {
     ClientError {
         body: String
     },
-    SnapMsg
+    SnapMsg,
+    InstallSnapshot {
+        body: raft_rpc::SnapshotRequest,
+        tx: oneshot::Sender<RaftMessage<T>>
+    },
+    InstallSnapshotResp {
+        payload: raft_rpc::SnapshotResponse,
+        status: Option<tonic::Status>
+    }
 }
 
 pub struct ConfigMap {

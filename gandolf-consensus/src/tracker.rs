@@ -17,6 +17,12 @@ pub trait Tracker: Sync + Send + 'static {
 
     fn get_log_term(&self, index: Index) -> Term;
 
+    fn get_last_snapshot_index(&self) -> Index;
+
+    fn get_last_snapshot_term(&self) -> Term;
+
+    fn get_snapshot_no(&self) -> u64;
+
     fn append_log(&mut self, entity: Self::Entity, term: Term) -> crate::Result<Index>;
 
     fn delete_last_log(&mut self) -> crate::Result<()>;
@@ -24,6 +30,8 @@ pub trait Tracker: Sync + Send + 'static {
     async fn take_snapshot(&mut self) -> crate::Result<()>;
 
     async fn load_snappshot(&mut self, entity: &Self::Entity, len: u64, last_log_term: Term) -> crate::Result<()>;
+
+    async fn read_snapshot(&self) -> crate::Result<String>;
 
     async fn commit(&mut self, index: Index) -> crate::Result<Self::Entity>;
 }

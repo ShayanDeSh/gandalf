@@ -6,6 +6,7 @@ use crate::raft_rpc::raft_rpc_client::RaftRpcClient;
 use crate::raft_rpc::{AppendEntriesRequest, AppendEntriesResponse};
 use crate::raft_rpc::{RequestVoteRequest, RequestVoteResponse};
 use crate::raft_rpc::{ForwardEntryRequest, ForwardEntryResponse};
+use crate::raft_rpc::{SnapshotRequest, SnapshotResponse};
 
 use crate::{Node, RaftMessage, ClientData};
 
@@ -122,6 +123,34 @@ impl<T: ClientData> RaftRpc for RaftRpcService<T> {
 
     }
 
+    async fn install_snapshot(&self, request: Request<SnapshotRequest>) ->
+        Result<Response<SnapshotResponse>, Status> {
+        let (tx, rx) = oneshot::channel();
+        let body = request.into_inner();
+        info!("{:?} Recived a snapshot", &body.leader_id);
+        let resp = self.tx_rpc.send(RaftMessage::InstallSnapshot{
+            body,
+            tx
+        }); 
+        if let Err(err) = resp {
+            return Err(Status::internal(err.to_string()));
+        }
+        let resp = match rx.await {
+            Ok(msg) => msg,
+            Err(err) => return Err(Status::internal(err.to_string()))
+        };
+        match resp {
+            RaftMessage::InstallSnapshotResp{payload, status} => {
+                if let Some(status) = status {
+                    return Err(status);
+                }
+                return Ok(Response::new(payload));
+            },
+            _ => {return Err(Status::unknown("Unkown response recived"));}
+        }
+        
+    }
+
 }
 
 pub async fn ask_for_vote(node: &Node, request: RequestVoteRequest) 
@@ -150,4 +179,15 @@ pub async fn forward(node: &Node, request: ForwardEntryRequest)
     let mut client = RaftRpcClient::connect(addr).await?;
     let response = client.forward_entry(request).await?;
     Ok(response.into_inner())
+}
+
+pub async fn install_snapshot(node: &Node, request: SnapshotRequest) 
+    -> crate::Result<SnapshotResponse> {
+    info!("Sending snapshot to {}", node.id);
+    let addr = format!("http://{}:{}", node.ip, node.port);
+    let mut client = RaftRpcClient::connect(addr).await?;
+    let response = client.install_snapshot(request).await?;
+    let resp = response.into_inner();
+    info!("Answerd with {:?}", resp);
+    Ok(resp)
 }

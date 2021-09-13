@@ -1,5 +1,8 @@
 use gandolf_kvs::{Frame, Connection};
 
+use tokio::io::{self, AsyncReadExt};
+use tokio::fs::File;
+
 use crate::Tracker;
 use crate::tracker::{Index, Term};
 
@@ -22,6 +25,7 @@ pub struct KvsTracker {
     addr: SocketAddr,
     snapshot_path: String,
     last_snapshot_term: Term,
+    last_snapshot_index: Index,
 }
 
 impl KvsTracker {
@@ -36,6 +40,7 @@ impl KvsTracker {
             addr,
             snapshot_path,
             last_snapshot_term: 0,
+            last_snapshot_index: 0
         }
     }
 }
@@ -78,6 +83,18 @@ impl Tracker for KvsTracker {
         }
         info!("index is {}", i as i64);
         self.log[i as usize].0
+    }
+
+    fn get_last_snapshot_index(&self) -> Index {
+        self.last_snapshot_index
+    }
+
+    fn get_last_snapshot_term(&self) -> Term {
+        self.last_snapshot_term
+    }
+
+    fn get_snapshot_no(&self) -> u64 {
+        self.snapshot_no
     }
 
     fn append_log(&mut self, entity: Self::Entity, term: Term) -> crate::Result<Index> {
@@ -144,6 +161,13 @@ impl Tracker for KvsTracker {
             _ => unreachable!()
         }
         Ok(())
+    }
+
+    async fn read_snapshot(&self) -> crate::Result<String> {
+        let mut f = File::open(format!("{}.ga", self.snapshot_no)).await?;
+        let mut dst = String::new();
+        f.read_to_string(&mut dst).await?;
+        return Ok(dst);
     }
 
     async fn commit(&mut self, index: Index) -> crate::Result<Self::Entity> {

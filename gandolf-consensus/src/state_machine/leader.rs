@@ -3,7 +3,7 @@ use crate::raft::State;
 use tracing::{instrument, error, info};
 use tokio::time::{Instant, sleep_until, Duration, sleep};
 use tokio::sync::{mpsc, RwLock, oneshot};
-use crate::raft_rpc::{AppendEntriesRequest, Entry, AppendEntriesResponse};
+use crate::raft_rpc::{AppendEntriesRequest, Entry, AppendEntriesResponse, SnapshotRequest};
 use crate::rpc;
 use std::collections::BTreeMap;
 
@@ -208,6 +208,9 @@ impl<T: ClientData, R: Tracker<Entity=T>> Replicator<T, R> {
                 ReplicationState::Lagged => Lagged::new(self).run().await,
                 ReplicationState::Updating => Updating::new(self).run().await,
                 ReplicationState::UpToDate => UpToDate::new(self).run().await,
+                ReplicationState::NeedSnappshot => {
+                    NeedSnappshot::new(self).run().await
+                },
                 _ => unreachable!()
             }
         }
@@ -288,11 +291,14 @@ impl<'a, T: ClientData, R: Tracker<Entity=T>> Lagged<'a, T, R> {
         let mut backoff = Duration::from_millis(1);
         loop {
             info!("next_index: {}, match_index: {}", self.replicator.next_index, self.replicator.match_index);
+            let tracker = self.replicator.tracker.read().await;
+            if self.replicator.next_index <= tracker.get_last_snapshot_index() {
+                self.replicator.state = ReplicationState::NeedSnappshot;
+            }
             if self.replicator.next_index -1 == self.replicator.match_index {
                 self.replicator.state = ReplicationState::Updating;
                 break;
             }
-            let tracker = self.replicator.tracker.read().await;
             let request = AppendEntriesRequest {
                 term: self.replicator.term,
                 leader_id: self.replicator.id.to_string(),
@@ -446,6 +452,62 @@ impl<'a, T: ClientData, R: Tracker<Entity=T>> UpToDate<'a, T, R> {
             _ => unreachable!()
         }
         Ok(())
+    }
+
+}
+
+struct NeedSnappshot<'a, T: ClientData, R: Tracker<Entity=T>> {
+    replicator: &'a mut Replicator<T, R>
+}
+
+impl<'a, T: ClientData, R: Tracker<Entity=T>> NeedSnappshot<'a, T, R> {
+    pub fn new(replicator: &'a mut Replicator<T, R>) -> NeedSnappshot<'a, T, R> {
+        NeedSnappshot {
+            replicator
+        }
+    }
+
+    pub async fn run(&mut self) {
+        let mut backoff = Duration::from_millis(1);
+        loop {
+            let node = self.replicator.get_node();
+            let tracker = self.replicator.tracker.read().await;
+
+            let data = match tracker.read_snapshot().await {
+                Ok(data) => data,
+                Err(err) => {
+                    error!("{}", err);
+                    self.replicator.state = ReplicationState::Lagged;
+                    break;
+                }
+            };
+
+            let request = SnapshotRequest { 
+                term: self.replicator.term,
+                leader_id: self.replicator.id.to_string(),
+                last_included_index: tracker.get_last_snapshot_index(),
+                last_included_term: tracker.get_last_snapshot_term(),
+                offset: tracker.get_snapshot_no(),
+                data,
+                done: true
+            };
+            match rpc::install_snapshot(&node, request).await{
+                Ok(resp) => {
+                    info!("snapshot responsed with {:?}", resp);
+                    self.replicator.match_index = tracker.get_last_snapshot_index();
+                    self.replicator.next_index = tracker.get_last_snapshot_index() + 1;
+                    self.replicator.state = ReplicationState::UpToDate;
+                    break;
+                },
+                Err(err) => {
+                    error!(cause = %err, "Caused an error: ");
+                    sleep(backoff).await;
+                    backoff = min(backoff * 2, self.replicator.heartbeat);
+                    continue;
+                }
+            }
+
+        }
     }
 
 }

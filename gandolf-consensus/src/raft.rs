@@ -40,6 +40,7 @@ pub struct Raft<T: ClientData, R: Tracker<Entity=T>> {
     pub election_timeout: u64,
     pub heartbeat: Duration,
     pub snapshot_offset: u64,
+    pub snapshot_num: u64,
     pub tracker: Arc<RwLock<R>>
 }
 
@@ -65,6 +66,7 @@ impl<T: ClientData, R: Tracker<Entity=T>> Raft<T, R> {
             election_timeout: config.timeout,
             heartbeat: Duration::from_millis(config.heartbeat),
             snapshot_offset: config.snapshot_offset,
+            snapshot_num: 0,
             tracker
         }
     }
@@ -117,9 +119,10 @@ impl<T: ClientData, R: Tracker<Entity=T>> Raft<T, R> {
         }
     }
 
-    pub async fn take_snapshot(&self) -> crate::Result<()> {
+    pub async fn take_snapshot(&mut self) -> crate::Result<()> {
         let mut tracker = self.tracker.write().await;
         tracker.take_snapshot().await?;
+        self.snapshot_num += 1;
         Ok(())
     }
 
