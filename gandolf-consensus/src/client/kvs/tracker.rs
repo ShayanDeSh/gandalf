@@ -11,7 +11,6 @@ use std::net::SocketAddr;
 
 use std::fs::OpenOptions;
 
-use tracing::info;
 
 pub struct Cell(Term, Frame);
 
@@ -72,16 +71,18 @@ impl Tracker for KvsTracker {
     } 
 
     fn get_log_entity(&self, index: Index) -> &Self::Entity {
-        let i = index - 1 - (self.snapshot_no as u64 * self.snapshot_offset as u64);
+        let i = index - 1 - self.get_last_snapshot_index();
         &self.log[i as usize].1
     }
 
     fn get_log_term(&self, index: Index) -> Term {
-        let i = index - 1 - (self.snapshot_no * self.snapshot_offset);
+        let i = index - 1 - self.get_last_snapshot_index();
         if i as i64 == -1 {
             return self.last_snapshot_term;
         }
-        info!("index is {}", i as i64);
+        if (i as i64) < 0 {
+            println!("{}", i as i64);
+        }
         self.log[i as usize].0
     }
 
@@ -132,12 +133,15 @@ impl Tracker for KvsTracker {
 
         self.snapshot_no += 1;
         self.last_snapshot_term = self.get_last_log_term();
-        self.log.clear();
-
+        self.last_snapshot_index = self.last_commited_index;
+        for _ in 0..self.snapshot_offset {
+            self.log.pop();
+        };
         Ok(())
     }
 
-    async fn load_snappshot(&mut self, entity: &Self::Entity, len: u64, last_log_term: Term) -> crate::Result<()> {
+    async fn load_snapshot(&mut self, entity: &Self::Entity, last_log_term: Term, last_log_index: Index, offset: u64) 
+        -> crate::Result<()> {
         let socket = TcpStream::connect(self.addr).await?;
         let mut connection = Connection::new(socket);
         connection.write_frame(entity).await?;
@@ -150,12 +154,14 @@ impl Tracker for KvsTracker {
                     .create(true)
                     .write(true)
                     .truncate(true)
-                    .open(format!("{}.ga", self.snapshot_no))?;
+                    .open(format!("{}/{}.ga", self.snapshot_path, offset))?;
                 serde_json::to_writer(file, entity)?;
                 self.snapshot_no += 1;
-                self.last_log_index = self.snapshot_no * len;
+                self.last_log_index = last_log_index;
                 self.last_log_term = last_log_term;
                 self.last_snapshot_term = last_log_term;
+                self.last_snapshot_index = last_log_index;
+                self.last_commited_index = last_log_index;
                 self.log.clear();
             },
             _ => unreachable!()
@@ -164,18 +170,19 @@ impl Tracker for KvsTracker {
     }
 
     async fn read_snapshot(&self) -> crate::Result<String> {
-        let mut f = File::open(format!("{}.ga", self.snapshot_no)).await?;
+        let mut f = File::open(format!("{}/{}.ga", self.snapshot_path, self.snapshot_no - 1)).await?;
         let mut dst = String::new();
         f.read_to_string(&mut dst).await?;
         return Ok(dst);
     }
 
     async fn commit(&mut self, index: Index) -> crate::Result<Self::Entity> {
+        let i = index - self.get_last_snapshot_index();
         if index + 1 != self.last_commited_index + 1 {
             return Err("Wrong commit index".into());
         }
 
-        let response = self.propagate(&self.log[index as usize].1).await?;
+        let response = self.propagate(&self.log[i as usize].1).await?;
 
         match response {
             Frame::Simple(_) => {

@@ -29,7 +29,8 @@ pub trait Tracker: Sync + Send + 'static {
 
     async fn take_snapshot(&mut self) -> crate::Result<()>;
 
-    async fn load_snappshot(&mut self, entity: &Self::Entity, len: u64, last_log_term: Term) -> crate::Result<()>;
+    async fn load_snapshot(&mut self, entity: &Self::Entity, last_log_term: Term, last_log_index: Index, offset: u64)
+        -> crate::Result<()>;
 
     async fn read_snapshot(&self) -> crate::Result<String>;
 
