@@ -112,9 +112,9 @@ impl<T: ClientData, R: Tracker<Entity=T>> Raft<T, R> {
         self.last_log_term = term; 
     }
 
-    pub fn update_commit_index(&mut self, index: u64) {
+    pub fn update_commit_index(&mut self, index: u64, snappshot: bool) {
         self.commit_index = index;
-        if index % self.snapshot_offset == 0 {
+        if index % self.snapshot_offset == 0 && snappshot {
             let _ = self.tx_snap.send(RaftMessage::SnapMsg);
         }
     }
