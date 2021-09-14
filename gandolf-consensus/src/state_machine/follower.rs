@@ -2,9 +2,11 @@ use crate::{Raft, ClientData, Tracker, RaftMessage};
 use crate::raft::State;
 use tracing::{instrument, info, error};
 use tokio::time::sleep_until;
-use crate::raft_rpc::{RequestVoteRequest, RequestVoteResponse, AppendEntriesResponse, AppendEntriesRequest};
+use crate::raft_rpc::{RequestVoteRequest, RequestVoteResponse, AppendEntriesResponse,
+AppendEntriesRequest, SnapshotRequest, SnapshotResponse};
 use crate::raft_rpc::ForwardEntryRequest;
 use crate::rpc::forward;
+use tokio::sync::oneshot::Sender;
 
 #[derive(Debug)]
 pub struct Follower <'a, T: ClientData, R: Tracker<Entity=T>> {
@@ -57,38 +59,69 @@ impl<'a, T: ClientData, R: Tracker<Entity=T>> Follower<'a, T, R> {
                 let _ = tx.send(self.handle_append_entry(body).await);
             },
             RaftMessage::ClientReadMsg{body, tx} => {
-                let _ = tx.send(self.forward_client_request(body, false).await);
+                let _ = self.forward_client_request(body, tx, false);
             },
             RaftMessage::ClientWriteMsg{body, tx} => {
-                let _ = tx.send(self.forward_client_request(body, true).await);
-            }
+                let _ = self.forward_client_request(body, tx, true);
+            },
+            RaftMessage::InstallSnapshot{body, tx} => {
+                let _ = tx.send(self.handle_snappshot(body).await);
+            },
             _ => unreachable!()
         }
         Ok(())
     }
 
     #[instrument(level="info", skip(self))]
-    async fn forward_client_request(&self, body: T, iswrite: bool) -> RaftMessage<T> {
+    async fn handle_snappshot(&mut self, body: SnapshotRequest) -> RaftMessage<T> {
+        let payload = SnapshotResponse { term: self.raft.current_term }; 
+        if body.term < self.raft.current_term {
+            return RaftMessage::InstallSnapshotResp { payload, status: None};
+        }
+
+        let entity = serde_json::from_str(&body.data).unwrap();
+
+        let mut tracker = self.raft.tracker.write().await;
+
+        match tracker.load_snapshot(&entity, body.last_included_term,
+            body.last_included_index, body.offset).await {
+            Ok(_) => info!("Snapshot loaded"),
+            Err(err) => error!("Could not load snapshot cause {}", err)
+        }
+        let commit_index = tracker.get_last_commited_index();
+        drop(tracker);
+
+        self.raft.update_last_log(body.last_included_index, body.last_included_term);
+        self.raft.update_commit_index(commit_index, false);
+
+        return RaftMessage::InstallSnapshotResp { payload, status: None };
+    }
+
+    #[instrument(level="info", skip(self))]
+    fn forward_client_request(&self, body: T,
+        tx: Sender<RaftMessage<T>>, iswrite: bool) {
         let leader = self.raft.current_leader.as_ref();
         if let Some(id) = leader {
             let mut iter = self.raft.get_all_nodes().into_iter().filter(|x| x.id == id.to_owned());
             let node = iter.next().unwrap();
             let payload = serde_json::to_string(&body).unwrap();
             let request = ForwardEntryRequest { payload, iswrite };
-            let resp = forward(&node, request).await;
-            match resp {
-                Ok(resp) => {
-                    let body = serde_json::from_str(&resp.payload).unwrap();
-                    return RaftMessage::ClientResp {
-                        body 
-                    };
-                },
-                Err(err) => {
-                    return RaftMessage::ClientError{ body: err.to_string() };
+            tokio::spawn(async move {
+                let resp = forward(&node, request).await;
+                match resp {
+                    Ok(resp) => {
+                        let body = serde_json::from_str(&resp.payload).unwrap();
+                        let _ = tx.send(RaftMessage::ClientResp {
+                            body 
+                        });
+                    },
+                    Err(err) => {
+                        let _ = tx.send(RaftMessage::ClientError{ body: err.to_string() });
+                    }
                 }
-            }
+            });
         } else {
-            return RaftMessage::ClientError{ body: "No leader exist".into() };
+            let _ = tx.send(RaftMessage::ClientError{ body: "No leader exist".into() });
         };
 
     }
@@ -154,7 +187,7 @@ impl<'a, T: ClientData, R: Tracker<Entity=T>> Follower<'a, T, R> {
                 drop(tracker);
                 match frame {
                     Ok(_) => {
-                        self.raft.update_commit_index(i + 1);
+                        self.raft.update_commit_index(i + 1, true);
                     },
                     Err(err) => {
                         return Err(err);
@@ -177,6 +210,7 @@ impl<'a, T: ClientData, R: Tracker<Entity=T>> Follower<'a, T, R> {
                 })
             };
         }
+        self.raft.current_term = body.term;
         if self.raft.last_term() != body.prev_log_term || self.raft.last_index() != body.prev_log_index {
             info!("Recived an append entry: False Response, last_log_term = {}, last_log_index = {}",
                 self.raft.last_term(), self.raft.last_index());
@@ -190,7 +224,6 @@ impl<'a, T: ClientData, R: Tracker<Entity=T>> Follower<'a, T, R> {
         }
         self.raft.current_leader = Some(body.leader_id);
         if body.entries.len() == 0 {
-            self.raft.current_term = body.term;
             match self.check_for_commit(self.raft.last_index(), body.leader_commit).await {
                 Ok(_) => {
                 },
@@ -249,6 +282,7 @@ impl<'a, T: ClientData, R: Tracker<Entity=T>> Follower<'a, T, R> {
                 }
             }
         };
+        info!("Returning response true");
         return RaftMessage::AppendResp {
             status: None,
             payload: Some(AppendEntriesResponse {
