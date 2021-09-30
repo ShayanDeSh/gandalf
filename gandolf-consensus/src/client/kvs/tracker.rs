@@ -12,8 +12,10 @@ use std::net::SocketAddr;
 use std::fs::OpenOptions;
 
 
+#[derive(Debug, Clone)]
 pub struct Cell(Term, Frame);
 
+#[derive(Debug, Clone)]
 pub struct KvsTracker {
     log: Vec<Cell>,
     last_log_index: Index,

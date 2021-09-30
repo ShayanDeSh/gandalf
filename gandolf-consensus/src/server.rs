@@ -81,6 +81,15 @@ pub async fn run<T: ClientData, P: Parser<T>, R: Tracker<Entity=T>>(shutdown: im
 }
 
 impl<P: Parser<T>, T: ClientData> Listener<P, T> {
+    pub fn new(listener: TcpListener, tx_client: mpsc::UnboundedSender<RaftMessage<T>>) 
+        -> Listener<P, T> {
+        Listener {
+            listener,
+            tx_client,
+            parser: PhantomData
+        }
+    }
+
     pub async fn run(&mut self, parser: P) -> crate::Result<()> {
         loop {
             let socket = self.accept().await?;

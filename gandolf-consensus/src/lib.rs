@@ -92,10 +92,10 @@ pub enum RaftMessage<T: ClientData> {
 }
 
 pub struct ConfigMap {
-    host: String,
-    port: u16,
-    connecntion_host: String,
-    connecntion_port: u16,
+    pub host: String,
+    pub port: u16,
+    pub connecntion_host: String,
+    pub connecntion_port: u16,
     nodes: HashSet<Node>,
     nodes_state: BTreeMap<NodeID, NodeState>,
     heartbeat: u64,
