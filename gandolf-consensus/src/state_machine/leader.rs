@@ -16,7 +16,8 @@ pub struct Leader <'a, T: ClientData, R: Tracker<Entity=T>> {
     raft: &'a mut Raft<T, R>,
     replicators: Vec<mpsc::UnboundedSender<ReplicatorMsg>>,
     rx_repl: mpsc::UnboundedReceiver<ReplicatorMsg>,
-    commit_queue: BTreeMap<u64, oneshot::Sender<RaftMessage<T>>>
+    commit_queue: BTreeMap<u64, oneshot::Sender<RaftMessage<T>>>,
+    shutdown_txs: Vec<oneshot::Sender<()>>
 }
 
 #[derive(Debug, Clone)]
@@ -57,10 +58,14 @@ impl<'a, T: ClientData, R: Tracker<Entity=T>> Leader<'a, T, R> {
     pub fn new(raft:&'a mut Raft<T, R>) -> Leader<T, R> {
         let mut replicators = Vec::new();
 
+        let mut shutdown_txs = Vec::new();
+
         let (tx_repl, rx_core_repl) = mpsc::unbounded_channel();
 
         for node in raft.get_all_nodes().into_iter() {
             let (tx_core_repl, rx_repl) = mpsc::unbounded_channel();
+            let (tx_shutdown, rx_shutdown) = oneshot::channel();
+            shutdown_txs.push(tx_shutdown);
             let match_index = if let Some(state) = raft.nodes_state.get(&node.id) {
                 state.match_index
             } else {
@@ -71,14 +76,19 @@ impl<'a, T: ClientData, R: Tracker<Entity=T>> Leader<'a, T, R> {
                 rx_repl, tx_repl.clone(), raft.heartbeat);
 
             tokio::spawn(async move {
-                replicator.run().await;
+                tokio::select! {
+                    _ = replicator.run() => {
+                    },
+                    _ = rx_shutdown => {
+                    }
+                }
             });
 
             replicators.push(tx_core_repl);
         }
 
         Leader { raft, replicators, rx_repl: rx_core_repl,
-        commit_queue: BTreeMap::new()}
+        commit_queue: BTreeMap::new(), shutdown_txs}
     }
 
     #[instrument(level="info", skip(self))]
@@ -296,7 +306,6 @@ impl<'a, T: ClientData, R: Tracker<Entity=T>> Lagged<'a, T, R> {
             let tracker = self.replicator.tracker.read().await;
             info!("next_index: {}, match_index: {}, snapshot_index: {}",
                 self.replicator.next_index, self.replicator.match_index, tracker.get_last_snapshot_index());
-            println!("here");
             if self.replicator.next_index <= tracker.get_last_snapshot_index() {
                 self.replicator.state = ReplicationState::NeedSnappshot;
                 break;
