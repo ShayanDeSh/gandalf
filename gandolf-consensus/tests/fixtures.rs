@@ -12,14 +12,16 @@ use tonic::transport::Server;
 use std::sync::Arc;
 use std::net::SocketAddr;
 
+use std::cell::RefCell;
+
 pub async fn create_cluster<T: ClientData, R: Tracker<Entity=T>, P: Parser<T>>
 (node_configs: Vec<NodeConfig>, tracker: Vec<R>, parser: P)
-    -> gandolf_consensus::Result<Vec<(Raft<T, R>, SocketAddr)>> {
+    -> gandolf_consensus::Result<Vec<(RefCell<Raft<T, R>>, SocketAddr)>> {
     let mut cluster = Vec::new();
     for (i, conf) in node_configs.into_iter().enumerate() {
         let kvs_addr = create_kvs_server().await;
         let raft = create_node(conf, tracker[i].clone(), parser.clone()).await?;
-        cluster.append(&mut vec![(raft, kvs_addr)]);
+        cluster.append(&mut vec![(RefCell::new(raft), kvs_addr)]);
     }
     Ok(cluster)
 }
