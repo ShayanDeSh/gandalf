@@ -78,13 +78,18 @@ impl Tracker for KvsTracker {
     }
 
     fn get_log_term(&self, index: Index) -> Term {
-        let i = index - 1 - self.get_last_snapshot_index();
-        if i as i64 == -1 {
+    //    let i = index - 1 - self.get_last_snapshot_index();
+    //    if i as i64 == -1 {
+    //        return self.last_snapshot_term;
+    //    }
+    //    if (i as i64) < 0 {
+    //        println!("{}", i as i64);
+    //    }
+        let i = if let Some(x) = index.checked_sub(1 + self.get_last_snapshot_index()) {
+            x
+        } else {
             return self.last_snapshot_term;
-        }
-        if (i as i64) < 0 {
-            println!("{}", i as i64);
-        }
+        };
         self.log[i as usize].0
     }
 
