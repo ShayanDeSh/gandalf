@@ -93,6 +93,7 @@ impl<'a, T: ClientData, R: Tracker<Entity=T>> Follower<'a, T, R> {
 
         self.raft.update_last_log(body.last_included_index, body.last_included_term);
         self.raft.update_commit_index(commit_index, false);
+        self.raft.snapshot_num =  body.offset;
 
         return RaftMessage::InstallSnapshotResp { payload, status: None };
     }

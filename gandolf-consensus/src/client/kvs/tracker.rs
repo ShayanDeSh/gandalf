@@ -163,12 +163,13 @@ impl Tracker for KvsTracker {
                     .truncate(true)
                     .open(format!("{}/{}.ga", self.snapshot_path, offset))?;
                 serde_json::to_writer(file, entity)?;
-                self.snapshot_no += 1;
                 self.last_log_index = last_log_index;
                 self.last_log_term = last_log_term;
                 self.last_snapshot_term = last_log_term;
                 self.last_snapshot_index = last_log_index;
                 self.last_commited_index = last_log_index;
+                self.snapshot_no = offset;
+
                 self.log.clear();
             },
             _ => unreachable!()
