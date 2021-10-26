@@ -1,6 +1,6 @@
 use gandolf_kvs::{Frame, Connection};
 
-use tokio::io::{self, AsyncReadExt};
+use tokio::io::AsyncReadExt;
 use tokio::fs::File;
 
 use crate::Tracker;
