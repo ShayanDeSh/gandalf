@@ -1,9 +1,13 @@
 [package]
 name = "gandolf-consensus"
-version = "0.1.0"
+version = "1.0.0"
 authors = ["shayandesh <shayandesh@gmail.com>"]
 edition = "2018"
-licence = "GPL-3.0-or-later"
+repository = "https://github.com/NothingRealm/gandolf"
+license = "GPL-3.0-or-later"
+description = """ 
+An implemention of raft to bring any database with consensus
+"""
 
 [[bin]]
 name = "gandolf"
@@ -18,7 +22,7 @@ bytes = "1"
 atoi = "0.4.0"
 uuid = { version = "0.8", features = ["v4"] }
 rand = "0.8.4"
-gandolf-kvs = { path = "../gandolf-kvs" }
+gandolf-kvs = "1.0.0"
 
 tonic = "0.5.1"
 prost = "0.8"
