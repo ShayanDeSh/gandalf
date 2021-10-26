@@ -3,7 +3,8 @@ use crate::raft::State;
 use tracing::{instrument, error, info};
 use tokio::time::{Instant, sleep_until, Duration, sleep};
 use tokio::sync::{mpsc, RwLock, oneshot};
-use crate::raft_rpc::{AppendEntriesRequest, Entry, AppendEntriesResponse, SnapshotRequest};
+use crate::raft_rpc::{AppendEntriesRequest, Entry, AppendEntriesResponse};
+use crate::raft_rpc::SnapshotRequest;
 use crate::rpc;
 use std::collections::BTreeMap;
 
@@ -135,6 +136,10 @@ impl<'a, T: ClientData, R: Tracker<Entity=T>> Leader<'a, T, R> {
                     let _ = replicator.send(repl_req.clone());
                 }
             },
+            RaftMessage::VoteMsg{body, tx} => {
+                info!("Recived a vote msg from {}", body.candidate_id);
+                let _ = tx.send(self.raft.handle_vote_request(body));
+            }
            _ => unreachable!()
        }
        Ok(())
@@ -218,9 +223,8 @@ impl<T: ClientData, R: Tracker<Entity=T>> Replicator<T, R> {
                 ReplicationState::Updating => Updating::new(self).run().await,
                 ReplicationState::UpToDate => UpToDate::new(self).run().await,
                 ReplicationState::NeedSnappshot => {
-                    NeedSnappshot::new(self).run().await
+                NeedSnappshot::new(self).run().await
                 },
-                _ => unreachable!()
             }
         }
     }
@@ -504,7 +508,9 @@ impl<'a, T: ClientData, R: Tracker<Entity=T>> NeedSnappshot<'a, T, R> {
             data,
             done: true
         };
+
         drop(tracker);
+
         loop {
             let node = self.replicator.get_node();
             match rpc::install_snapshot(&node, request.clone()).await {

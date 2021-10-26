@@ -2,8 +2,7 @@ use crate::{Raft, ClientData, Tracker, RaftMessage};
 use crate::raft::State;
 use tracing::{instrument, info, error};
 use tokio::time::sleep_until;
-use crate::raft_rpc::{RequestVoteRequest, RequestVoteResponse, AppendEntriesResponse,
-AppendEntriesRequest, SnapshotRequest, SnapshotResponse};
+use crate::raft_rpc::{AppendEntriesResponse, AppendEntriesRequest, SnapshotRequest, SnapshotResponse};
 use crate::raft_rpc::ForwardEntryRequest;
 use crate::rpc::forward;
 use tokio::sync::oneshot::Sender;
@@ -53,7 +52,7 @@ impl<'a, T: ClientData, R: Tracker<Entity=T>> Follower<'a, T, R> {
         match request {
             RaftMessage::VoteMsg{body, tx} => {
                 info!("Recived a vote msg from {}", body.candidate_id);
-                let _ = tx.send(self.handle_vote_request(body));
+                let _ = tx.send(self.raft.handle_vote_request(body));
             },
             RaftMessage::AppendMsg{body, tx} => {
                 let _ = tx.send(self.handle_append_entry(body).await);
@@ -125,58 +124,6 @@ impl<'a, T: ClientData, R: Tracker<Entity=T>> Follower<'a, T, R> {
             let _ = tx.send(RaftMessage::ClientError{ body: "No leader exist".into() });
         };
 
-    }
-
-    #[instrument(level="info", skip(self))]
-    fn handle_vote_request(&mut self, body: RequestVoteRequest) -> RaftMessage<T> {
-        if self.raft.current_term > body.term {
-            return RaftMessage::VoteResp {
-                payload: RequestVoteResponse {
-                    term: self.raft.current_term,
-                    vote_granted: false
-                },
-                status: None
-            }
-        }
-        self.raft.current_term = body.term;
-        if (self.raft.last_term() > body.last_log_term) || (self.raft.last_index() > body.last_log_index) {
-            return RaftMessage::VoteResp {
-                payload: RequestVoteResponse {
-                    term: self.raft.current_term,
-                    vote_granted: false
-                },
-                status: None
-            }
-        }
-        match &self.raft.voted_for {
-            Some(candidate_id) if candidate_id.to_string() == body.candidate_id => {
-                return RaftMessage::VoteResp {
-                    payload: RequestVoteResponse {
-                        term: self.raft.current_term,
-                        vote_granted: true
-                    },
-                    status: None
-                }
-            },
-            Some(_) => {
-                return RaftMessage::VoteResp {
-                    payload: RequestVoteResponse {
-                        term: self.raft.current_term,
-                        vote_granted: false
-                    },
-                    status: None
-                }
-            },
-            None => {
-                return RaftMessage::VoteResp {
-                    payload: RequestVoteResponse {
-                        term: self.raft.current_term,
-                        vote_granted: true
-                    },
-                    status: None
-                }
-            }
-        }
     }
 
     async fn check_for_commit(&mut self, index: u64, leader_commit: u64) -> crate::Result<()> {

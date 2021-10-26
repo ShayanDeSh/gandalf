@@ -11,6 +11,7 @@ use tracing::info;
 use crate::{NodeID, Node, NodeState, RaftMessage, ConfigMap, ClientData, Tracker};
 use crate::state_machine::{Follower, Candidate, Leader};
 
+use crate::raft_rpc::{RequestVoteRequest, RequestVoteResponse};
 
 #[derive(Debug, PartialEq, Eq)]
 pub enum State {
@@ -89,8 +90,59 @@ impl<T: ClientData, R: Tracker<Entity=T>> Raft<T, R> {
                 }
             }
         }
-        unreachable!();
-        Ok(())
+    }
+
+    pub fn handle_vote_request(&mut self, body: RequestVoteRequest) -> RaftMessage<T> {
+        if self.current_term > body.term {
+            return RaftMessage::VoteResp {
+                payload: RequestVoteResponse {
+                    term: self.current_term,
+                    vote_granted: false
+                },
+                status: None
+            }
+        }
+        self.current_term = body.term;
+        if (self.last_term() > body.last_log_term) || (self.last_index() > body.last_log_index) {
+            return RaftMessage::VoteResp {
+                payload: RequestVoteResponse {
+                    term: self.current_term,
+                    vote_granted: false
+                },
+                status: None
+            }
+        }
+        match &self.voted_for {
+            Some(candidate_id) if candidate_id.to_string() == body.candidate_id => {
+                self.set_state(State::Follower);
+                return RaftMessage::VoteResp {
+                    payload: RequestVoteResponse {
+                        term: self.current_term,
+                        vote_granted: true
+                    },
+                    status: None
+                }
+            },
+            Some(_) => {
+                return RaftMessage::VoteResp {
+                    payload: RequestVoteResponse {
+                        term: self.current_term,
+                        vote_granted: false
+                    },
+                    status: None
+                }
+            },
+            None => {
+                self.set_state(State::Follower);
+                return RaftMessage::VoteResp {
+                    payload: RequestVoteResponse {
+                        term: self.current_term,
+                        vote_granted: true
+                    },
+                    status: None
+                }
+            }
+        }
     }
 
     pub fn set_state(&mut self, state: State) {
