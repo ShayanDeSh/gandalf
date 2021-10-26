@@ -3,6 +3,7 @@ name = "gandolf-consensus"
 version = "0.1.0"
 authors = ["shayandesh <shayandesh@gmail.com>"]
 edition = "2018"
+licence = "GPL-3.0-or-later"
 
 [[bin]]
 name = "gandolf"
