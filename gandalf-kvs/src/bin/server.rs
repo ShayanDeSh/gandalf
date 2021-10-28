@@ -1,4 +1,4 @@
-use gandolf_kvs::server;
+use gandalf_kvs::server;
 
 use structopt::StructOpt;
 use tokio::net::TcpListener;
@@ -10,7 +10,7 @@ use tracing::info;
 use tracing_subscriber;
 
 #[tokio::main]
-pub async fn main() -> Result<(), gandolf_kvs::Error> {
+pub async fn main() -> Result<(), gandalf_kvs::Error> {
     tracing_subscriber::fmt::try_init()?;
 
     let cli = Cli::from_args();
@@ -28,13 +28,13 @@ pub async fn main() -> Result<(), gandolf_kvs::Error> {
 
 
 #[derive(StructOpt, Debug)]
-#[structopt(name = "gandolf-kvs-server", version = env!("CARGO_PKG_VERSION"),
-    author = env!("CARGO_PKG_AUTHORS"), about = "gandolf's key value store")]
+#[structopt(name = "gandalf-kvs-server", version = env!("CARGO_PKG_VERSION"),
+    author = env!("CARGO_PKG_AUTHORS"), about = "gandalf's key value store")]
 struct Cli {
     #[structopt(name = "port", short = "-p", long = "--port", default_value = "127.0.0.1")]
     port: String,
 
-    #[structopt(name = "host", long = "--host", default_value = gandolf_kvs::DEFAULT_PORT)]
+    #[structopt(name = "host", long = "--host", default_value = gandalf_kvs::DEFAULT_PORT)]
     host: String,
 }
 

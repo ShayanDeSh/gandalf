@@ -1,13 +1,13 @@
 mod fixtures;
 
-use gandolf_consensus::raft::State;
+use gandalf_consensus::raft::State;
 
 use tokio::time::{Duration, sleep};
 
 use fixtures::kvs_helpers::kvs_cluster_of_nth;
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 5)]
-async fn test_cluster_bootstrap() -> gandolf_consensus::Result<()>{
+async fn test_cluster_bootstrap() -> gandalf_consensus::Result<()>{
     let cluster = kvs_cluster_of_nth(5).await?;
 
     let mut node1 = cluster.get(0).unwrap().0.borrow_mut();
@@ -52,7 +52,7 @@ async fn test_cluster_bootstrap() -> gandolf_consensus::Result<()>{
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 5)]
-async fn test_re_election() -> gandolf_consensus::Result<()> {
+async fn test_re_election() -> gandalf_consensus::Result<()> {
     let cluster = kvs_cluster_of_nth(5).await?;
 
     let mut node1 = cluster.get(0).unwrap().0.borrow_mut();
@@ -131,7 +131,7 @@ async fn test_re_election() -> gandolf_consensus::Result<()> {
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 5)]
-async fn test_time_out() -> gandolf_consensus::Result<()> {
+async fn test_time_out() -> gandalf_consensus::Result<()> {
     let cluster = kvs_cluster_of_nth(5).await?;
 
     let mut node1 = cluster.get(0).unwrap().0.borrow_mut();

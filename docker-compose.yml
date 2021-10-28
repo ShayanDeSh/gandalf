@@ -4,13 +4,13 @@ version: "3.9"
 
 services:
     node1:
-        container_name: gandolf_1
-        image: gandolf:latest
+        container_name: gandalf_1
+        image: gandalf:latest
         restart: always
         environment:
             - RUST_LOG=info
         volumes:
-            - ./gandolf_1.conf:/etc/gandolf.conf
+            - ./gandalf_1.conf:/etc/gandalf.conf
         networks:
             vpcbr:
                 ipv4_address: 10.5.0.2
@@ -18,13 +18,13 @@ services:
             - kvs1
 
     node2:
-        container_name: gandolf_2
-        image: gandolf:latest
+        container_name: gandalf_2
+        image: gandalf:latest
         restart: always
         environment:
             - RUST_LOG=info
         volumes:
-            - ./gandolf_2.conf:/etc/gandolf.conf
+            - ./gandalf_2.conf:/etc/gandalf.conf
         networks:
             vpcbr:
                 ipv4_address: 10.5.0.3
@@ -32,13 +32,13 @@ services:
             - kvs2
 
     node3:
-        container_name: gandolf_3
-        image: gandolf:latest
+        container_name: gandalf_3
+        image: gandalf:latest
         restart: always
         environment:
             - RUST_LOG=info
         volumes:
-            - ./gandolf_3.conf:/etc/gandolf.conf
+            - ./gandalf_3.conf:/etc/gandalf.conf
         networks:
             vpcbr:
                 ipv4_address: 10.5.0.4
@@ -47,7 +47,7 @@ services:
 
     kvs1:
         container_name: kvs_1
-        image: gandolf-kvs:latest
+        image: gandalf-kvs:latest
         restart: always
         networks:
             vpcbr:
@@ -55,7 +55,7 @@ services:
 
     kvs2:
         container_name: kvs_2
-        image: gandolf-kvs:latest
+        image: gandalf-kvs:latest
         restart: always
         networks:
             vpcbr:
@@ -63,7 +63,7 @@ services:
 
     kvs3:
         container_name: kvs_3
-        image: gandolf-kvs:latest
+        image: gandalf-kvs:latest
         restart: always
         networks:
             vpcbr:

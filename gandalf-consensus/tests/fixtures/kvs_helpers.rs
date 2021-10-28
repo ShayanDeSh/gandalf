@@ -1,5 +1,5 @@
-use gandolf_consensus::client::kvs::{KvsParser, KvsTracker}; 
-use gandolf_consensus::Raft;
+use gandalf_consensus::client::kvs::{KvsParser, KvsTracker}; 
+use gandalf_consensus::Raft;
 
 use gandolf_kvs::Frame;
 
@@ -13,7 +13,7 @@ use std::cell::RefCell;
 
 use gandolf_kvs::client;
 
-pub async fn kvs_cluster_of_nth(nth: u16) ->  gandolf_consensus::Result<Vec<(RefCell<Raft<Frame, KvsTracker>>, SocketAddr)>> {
+pub async fn kvs_cluster_of_nth(nth: u16) ->  gandalf_consensus::Result<Vec<(RefCell<Raft<Frame, KvsTracker>>, SocketAddr)>> {
     let mut ts = Vec::new();
     let mut cs = Vec::new();
 
@@ -51,7 +51,7 @@ pub async fn kvs_cluster_of_nth(nth: u16) ->  gandolf_consensus::Result<Vec<(Ref
     create_cluster(cs, ts, KvsParser).await
 }
 
-pub async fn client_write_requset(count: u32, addr: String, sleep_duration: Duration) -> gandolf_consensus::Result<()> {
+pub async fn client_write_requset(count: u32, addr: String, sleep_duration: Duration) -> gandalf_consensus::Result<()> {
     sleep(sleep_duration).await;
     let mut con = client::connect(addr).await?;
     for i in 0..count {
@@ -63,7 +63,7 @@ pub async fn client_write_requset(count: u32, addr: String, sleep_duration: Dura
     Ok(())
 }
 
-pub async fn client_read_requset(count: u32, addr: String, sleep_duration: Duration) -> gandolf_consensus::Result<()> {
+pub async fn client_read_requset(count: u32, addr: String, sleep_duration: Duration) -> gandalf_consensus::Result<()> {
     sleep(sleep_duration).await;
     let mut con = client::connect(addr).await?;
     for i in 0..count {

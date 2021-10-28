@@ -1,8 +1,8 @@
-use gandolf_consensus::{Raft, ConfigMap, ClientData, Tracker};
-use gandolf_consensus::server::Listener;
-use gandolf_consensus::parser::Parser;
-use gandolf_consensus::rpc::RaftRpcService;
-use gandolf_consensus::raft_rpc::raft_rpc_server::RaftRpcServer;
+use gandalf_consensus::{Raft, ConfigMap, ClientData, Tracker};
+use gandalf_consensus::server::Listener;
+use gandalf_consensus::parser::Parser;
+use gandalf_consensus::rpc::RaftRpcService;
+use gandalf_consensus::raft_rpc::raft_rpc_server::RaftRpcServer;
 
 use tokio::net::TcpListener;
 use tokio::sync::{mpsc, RwLock};
@@ -16,7 +16,7 @@ use std::cell::RefCell;
 
 pub async fn create_cluster<T: ClientData, R: Tracker<Entity=T>, P: Parser<T>>
 (node_configs: Vec<NodeConfig>, tracker: Vec<R>, parser: P)
-    -> gandolf_consensus::Result<Vec<(RefCell<Raft<T, R>>, SocketAddr)>> {
+    -> gandalf_consensus::Result<Vec<(RefCell<Raft<T, R>>, SocketAddr)>> {
     let mut cluster = Vec::new();
     for (i, conf) in node_configs.into_iter().enumerate() {
         let kvs_addr = create_kvs_server().await;
@@ -27,7 +27,7 @@ pub async fn create_cluster<T: ClientData, R: Tracker<Entity=T>, P: Parser<T>>
 }
 
 pub async fn create_node<T: ClientData, R: Tracker<Entity=T>, P: Parser<T>>(conf: NodeConfig, tracker: R, parser: P) 
-    -> gandolf_consensus::Result<Raft<T, R>> {
+    -> gandalf_consensus::Result<Raft<T, R>> {
     let (tx_rpc, rx_rpc) = mpsc::unbounded_channel();
 
     let nodes = conf.nodes.ok_or("You must pass list of nodes")?;

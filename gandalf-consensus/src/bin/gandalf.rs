@@ -1,13 +1,13 @@
 use serde::{Serialize, Deserialize};
-use gandolf_consensus::{server, ConfigMap};
-use gandolf_consensus::{DEFAULT_PORT, HEARTBEAT, TIMEOUT};
+use gandalf_consensus::{server, ConfigMap};
+use gandalf_consensus::{DEFAULT_PORT, HEARTBEAT, TIMEOUT};
 
 use tracing_subscriber;
 use tokio::signal;
 
 use structopt::StructOpt;
 
-use gandolf_consensus::client::kvs::{KvsParser, KvsTracker}; 
+use gandalf_consensus::client::kvs::{KvsParser, KvsTracker}; 
 
 fn read_config(path: &str) -> serde_yaml::Result<Option<Cli>> {
     let config_file = std::fs::File::open(path).ok();
@@ -20,7 +20,7 @@ fn read_config(path: &str) -> serde_yaml::Result<Option<Cli>> {
 
 
 #[tokio::main]
-pub async fn main() -> Result<(), gandolf_consensus::Error> {
+pub async fn main() -> Result<(), gandalf_consensus::Error> {
     tracing_subscriber::fmt::try_init()?;
 
     let cli = Cli::from_args();
@@ -47,8 +47,8 @@ pub async fn main() -> Result<(), gandolf_consensus::Error> {
 }
 
 #[derive(StructOpt, Debug, Serialize, Deserialize)]
-#[structopt(name = "gandolf", version = env!("CARGO_PKG_VERSION"),
-    author = env!("CARGO_PKG_AUTHORS"), about = "gandolf consensus system")]
+#[structopt(name = "gandalf", version = env!("CARGO_PKG_VERSION"),
+    author = env!("CARGO_PKG_AUTHORS"), about = "gandalf consensus system")]
 struct Cli {
     #[structopt(name = "port", short = "-p", long = "--port", default_value = DEFAULT_PORT)]
     port: u16,
@@ -83,7 +83,7 @@ struct Cli {
     #[structopt(name = "snapshot_path", long = "--snap", default_value = "/tmp")]
     snapshot_path: String,
 
-    #[structopt(name = "config", long = "--config", default_value = "/etc/gandolf.conf")]
+    #[structopt(name = "config", long = "--config", default_value = "/etc/gandalf.conf")]
     #[serde(skip)]
     config: String
 }

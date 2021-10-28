@@ -1,20 +1,20 @@
 [package]
-name = "gandolf-kvs"
+name = "gandalf-kvs"
 version = "1.0.0"
 authors = ["shayandesh <shayandesh@gmail.com>"]
 edition = "2018"
-repository = "https://github.com/NothingRealm/gandolf/kvs"
+repository = "https://github.com/NothingRealm/gandalf/kvs"
 license = "GPL-3.0-or-later"
 description = """ 
-A key value stroe used in gandolf consensus system
+A key value stroe used in gandalf consensus system
 """
 
 [[bin]]
-name = "gandolf-kvs-server"
+name = "gandalf-kvs-server"
 path = "src/bin/server.rs"
 
 [[bin]]
-name = "gandolf-kvs"
+name = "gandalf-kvs"
 path = "src/bin/cli.rs"
 
 [dependencies]

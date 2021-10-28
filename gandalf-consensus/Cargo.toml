@@ -1,17 +1,17 @@
 [package]
-name = "gandolf-consensus"
+name = "gandalf-consensus"
 version = "1.0.0"
 authors = ["shayandesh <shayandesh@gmail.com>"]
 edition = "2018"
-repository = "https://github.com/NothingRealm/gandolf"
+repository = "https://github.com/NothingRealm/gandalf"
 license = "GPL-3.0-or-later"
 description = """ 
 An implemention of raft to bring any database with consensus
 """
 
 [[bin]]
-name = "gandolf"
-path = "src/bin/gandolf.rs"
+name = "gandalf"
+path = "src/bin/gandalf.rs"
 
 [dependencies]
 tokio = { version = "1", features = ["full"] }

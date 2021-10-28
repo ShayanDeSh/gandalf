@@ -1,11 +1,11 @@
-use gandolf_kvs::{client, DEFAULT_PORT};
+use gandalf_kvs::{client, DEFAULT_PORT};
 
 use bytes::Bytes;
 use std::str;
 use structopt::StructOpt;
 
 #[derive(StructOpt, Debug)]
-#[structopt(name = "gandolf-kvs", version = env!("CARGO_PKG_VERSION"), author = env!("CARGO_PKG_AUTHORS"), about = "Issue Redis commands")]
+#[structopt(name = "gandalf-kvs", version = env!("CARGO_PKG_VERSION"), author = env!("CARGO_PKG_AUTHORS"), about = "Issue Redis commands")]
 struct Cli {
     #[structopt(subcommand)]
     command: Command,
@@ -32,7 +32,7 @@ enum Command {
 }
 
 #[tokio::main(flavor = "current_thread")]
-async fn main() -> gandolf_kvs::Result<()> {
+async fn main() -> gandalf_kvs::Result<()> {
     tracing_subscriber::fmt::try_init()?;
 
     let cli = Cli::from_args();

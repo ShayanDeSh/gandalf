@@ -1,5 +1,5 @@
 [workspace]
 members = [
-    "gandolf-kvs",
-    "gandolf-consensus"
+    "gandalf-kvs",
+    "gandalf-consensus"
 ]

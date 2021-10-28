@@ -1,13 +1,13 @@
 mod fixtures;
 
-use gandolf_consensus::raft::State;
+use gandalf_consensus::raft::State;
 
 use tokio::time::Duration;
 
 use fixtures::kvs_helpers::{client_write_requset, kvs_cluster_of_nth};
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 5)]
-async fn test_direct_write() -> gandolf_consensus::Result<()> {
+async fn test_direct_write() -> gandalf_consensus::Result<()> {
     let cluster = kvs_cluster_of_nth(5).await?;
 
     let mut node1 = cluster.get(0).unwrap().0.borrow_mut();
@@ -68,7 +68,7 @@ async fn test_direct_write() -> gandolf_consensus::Result<()> {
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 5)]
-async fn test_indirect_write() -> gandolf_consensus::Result<()> {
+async fn test_indirect_write() -> gandalf_consensus::Result<()> {
     let cluster = kvs_cluster_of_nth(5).await?;
 
     let mut node1 = cluster.get(0).unwrap().0.borrow_mut();
