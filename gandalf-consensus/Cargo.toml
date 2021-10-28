@@ -22,7 +22,7 @@ bytes = "1"
 atoi = "0.4.0"
 uuid = { version = "0.8", features = ["v4"] }
 rand = "0.8.4"
-gandolf-kvs = "1.0.0"
+gandalf-kvs = "1.0.0"
 
 tonic = "0.5.1"
 prost = "0.8"

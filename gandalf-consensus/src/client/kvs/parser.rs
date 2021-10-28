@@ -1,8 +1,8 @@
 use bytes::{Buf, BufMut, BytesMut, Bytes};
 use std::io::Cursor;
 
-use gandolf_kvs::frame::{self, Frame};
-use gandolf_kvs::Command;
+use gandalf_kvs::frame::{self, Frame};
+use gandalf_kvs::Command;
 
 use crate::parser::{Parser, Kind};
 

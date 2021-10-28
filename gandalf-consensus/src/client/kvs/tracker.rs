@@ -1,4 +1,4 @@
-use gandolf_kvs::{Frame, Connection};
+use gandalf_kvs::{Frame, Connection};
 
 use tokio::io::AsyncReadExt;
 use tokio::fs::File;

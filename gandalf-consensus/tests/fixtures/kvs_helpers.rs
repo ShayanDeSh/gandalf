@@ -1,7 +1,7 @@
 use gandalf_consensus::client::kvs::{KvsParser, KvsTracker}; 
 use gandalf_consensus::Raft;
 
-use gandolf_kvs::Frame;
+use gandalf_kvs::Frame;
 
 use tokio::time::{Duration, sleep};
 
@@ -11,7 +11,7 @@ use super::common::{create_kvs_server, NodeConfig, create_cluster};
 
 use std::cell::RefCell;
 
-use gandolf_kvs::client;
+use gandalf_kvs::client;
 
 pub async fn kvs_cluster_of_nth(nth: u16) ->  gandalf_consensus::Result<Vec<(RefCell<Raft<Frame, KvsTracker>>, SocketAddr)>> {
     let mut ts = Vec::new();
